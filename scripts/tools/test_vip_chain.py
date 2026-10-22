@@ -1,14 +1,30 @@
 """端到端自检：会员音源 搜索 -> 取直链 -> 下载 -> 切片
 
 用法（必须带 ffmpeg 的 PATH）：
-  env -u PYTHONPATH PATH="/d/AstrBot/bin:$PATH" python tools/test_vip_chain.py 晴天
+  env -u PYTHONPATH PATH="<AstrBot>/bin:$PATH" python tools/test_vip_chain.py 晴天
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
-PLUGIN = Path("D:/AstrBot/data/plugins/astrbot_plugin_music")
+
+def _astrbot_home() -> Path:
+    """AstrBot 根目录：环境变量 > 跟着本文件走。
+
+    两个落脚点：仓库 <repo>/scripts/tools/、部署 <AstrBot>/tools/。
+    """
+    if os.environ.get("ASTRBOT_HOME"):
+        return Path(os.environ["ASTRBOT_HOME"])
+    here = Path(__file__).resolve()
+    if (here.parents[1] / "data").is_dir():      # <AstrBot>/tools/x.py
+        return here.parents[1]
+    return here.parents[2] / "runtime" / "astrbot"
+
+
+HOME = _astrbot_home()
+PLUGIN = HOME / "data" / "plugins" / "astrbot_plugin_music"
 sys.path.insert(0, str(PLUGIN))
 
 from core.audio import probe_duration, split_for_voice  # noqa: E402
@@ -18,7 +34,7 @@ from core.platform.qqmusic_vip import QQMusicVipMusic  # noqa: E402
 
 class StubCfg:
     http_proxy = None
-    songs_dir = Path("D:/AstrBot/data/temp/astrbot_plugin_music/songs")
+    songs_dir = HOME / "data" / "temp" / "astrbot_plugin_music" / "songs"
 
 
 async def main(keyword: str) -> None:

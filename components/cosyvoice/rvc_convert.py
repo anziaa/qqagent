@@ -10,14 +10,30 @@
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import urllib.request
 from pathlib import Path
 
-FFMPEG = r"D:/AstrBot/bin/ffmpeg.exe"
+
+def _ffmpeg() -> str:
+    """找 ffmpeg：环境变量 > PATH > 仓库自带 AstrBot 里那份。"""
+    if os.environ.get("FFMPEG_BIN"):
+        return os.environ["FFMPEG_BIN"]
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    for up in range(1, 4):
+        cand = Path(__file__).resolve().parents[up] / "runtime" / "astrbot" / "bin" / "ffmpeg.exe"
+        if cand.is_file():
+            return str(cand)
+    return "ffmpeg"
+
+
+FFMPEG = _ffmpeg()
 BASE = "http://127.0.0.1:7897"
-RVC_ROOT = Path(r"D:/RVC20240604Nvidia")
+RVC_ROOT = Path(os.environ.get("RVC_HOME") or r"D:/RVC20240604Nvidia")
 
 
 def post(path, payload, timeout=300):

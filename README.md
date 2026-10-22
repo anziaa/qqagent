@@ -68,10 +68,23 @@ scripts/
 config/
   *.example.json                插件配置模板（复制成 *.json 再改）
   personas/example.md           人格示例
+runtime/                        NapCat / AstrBot 本体（随仓库摆放，不入库，见下）
+cosyvoice2/                     7870 的运行目录（4.8G 权重 + venv，不入库）
 ```
 
 `config/` 里真正生效的配置、实际使用的人格、音色参考音频都不入库——它们含 QQ 号、
 私人对话和声纹，换成自己的一份就行。
+
+`runtime/` 放的是第三方运行时本体，跟仓库放在一起只是为了「一个目录就能跑起来」，
+但它们体积大、有各自的许可证和升级节奏，所以**不进版本库**：
+
+| 目录 | 放什么 | 从哪来 |
+|---|---|---|
+| `runtime/napcat/` | NapCat.Shell，QQ 协议端 | [NapCatQQ Releases](https://github.com/NapNeko/NapCatQQ/releases) |
+| `runtime/astrbot/` | AstrBot 的数据目录、插件、配置（Python 包本身装在你的 conda/venv 里） | [AstrBot](https://github.com/AstrBotDevs/AstrBot) |
+
+拉下仓库后把这两个目录按上表放回原位即可，`launcher.py` 和 `deploy.py` 会自动认
+`<仓库>/runtime/`，不需要改任何路径。要放别处就设 `QQAGENT_RUNTIME`。
 
 标 ★ 的是**在上游基础上改过源码**的插件，所以源码直接放在本仓库里。没改动过的插件
 （`proactive_chat`）不在这里，按下面的安装说明从 AstrBot 插件市场装原版即可。
@@ -179,10 +192,12 @@ cp config/astrbot_plugin_relation_config.example.json config/astrbot_plugin_rela
 （`relation` / `self_profile`）用部署脚本同步：
 
 ```bash
-# 通过环境变量指定 AstrBot 的位置
-set ASTRBOT_HOME=D:\AstrBot
+# 默认同步到 <仓库>/runtime/astrbot，不用传参
 python scripts/deploy.py --check   # 只看差异，不写文件
 python scripts/deploy.py           # 实际同步
+
+# AstrBot 装在别处时再显式指定
+set ASTRBOT_HOME=D:\somewhere\astrbot
 ```
 
 没改动过的 `proactive_chat` 不用从本仓库拿，直接在 AstrBot 插件管理里按名字安装原版

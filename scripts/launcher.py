@@ -23,13 +23,41 @@ import sys
 import time
 from dataclasses import dataclass, field
 
-NAPCAT_DIR = r"D:\Tools\NapCat.Shell"
-RVC_DIR = r"D:\RVC20240604Nvidia"
-API_DIR = r"D:\RVCSVC-API\RVCSVC-API"
-ASTRBOT_DIR = r"D:\AstrBot"
-ASTRBOT_EXE = r"D:\Anaconda_envs\envs\astrbot\Scripts\astrbot.exe"
+def _runtime_root() -> str:
+    """定位 runtime/ 目录。
+
+    本文件有两个落脚点，所以不能写死路径：
+      - 仓库里      <repo>/scripts/launcher.py
+      - 部署后      <repo>/runtime/astrbot/launcher.py
+    两个位置往上找一层或两层，谁底下有 napcat/ 就是 runtime。
+    要放到别处去跑，设 QQAGENT_RUNTIME 直接指定。
+    """
+    env = os.environ.get("QQAGENT_RUNTIME")
+    if env:
+        return os.path.abspath(env)
+    here = os.path.dirname(os.path.abspath(__file__))
+    for cand in (os.path.join(here, os.pardir),
+                 os.path.join(here, os.pardir, os.pardir)):
+        cand = os.path.abspath(cand)
+        if os.path.isdir(os.path.join(cand, "napcat")):
+            return cand
+    return os.path.abspath(os.path.join(here, os.pardir, "runtime"))
+
+
+RUNTIME = _runtime_root()
+# runtime/ 的上一级就是仓库根（cosyvoice2 直接躺在仓库根下）
+REPO_ROOT = os.path.dirname(RUNTIME) if os.path.basename(RUNTIME) == "runtime" else RUNTIME
+
+# 仓库内自带的运行时组件（NapCat / AstrBot 随仓库走，但不入库）
+NAPCAT_DIR = os.environ.get("NAPCAT_HOME") or os.path.join(RUNTIME, "napcat")
+ASTRBOT_DIR = os.environ.get("ASTRBOT_HOME") or os.path.join(RUNTIME, "astrbot")
+
+# 仓库外的两个重家伙（RVC 模型体积太大，单独放）
+RVC_DIR = os.environ.get("RVC_HOME") or r"D:\RVC20240604Nvidia"
+API_DIR = os.environ.get("RVCSVC_HOME") or r"D:\RVCSVC-API\RVCSVC-API"
+ASTRBOT_EXE = os.environ.get("ASTRBOT_EXE") or r"D:\Anaconda_envs\envs\astrbot\Scripts\astrbot.exe"
 # CosyVoice2 跑在自己的 venv 里（不用 conda：那个 cosyvoice 环境被清理机制打坏过）
-COSYVOICE_DIR = os.environ.get("COSYVOICE_HOME") or r"D:\Code\qqagent\cosyvoice2"
+COSYVOICE_DIR = os.environ.get("COSYVOICE_HOME") or os.path.join(REPO_ROOT, "cosyvoice2")
 COSYVOICE_PY = os.path.join(COSYVOICE_DIR, r"venv310\Scripts\python.exe")
 
 # 每开一个窗口就置这个标志，让子进程自己带一个控制台

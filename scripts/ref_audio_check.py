@@ -4,11 +4,29 @@
 看四件事：有效语音长度、信噪比、f0 覆盖范围、有没有削波。
 CosyVoice2 官方建议 3~10s 干净人声；低于 3s 或噪声大会明显掉相似度。
 """
+import os
+import shutil
 import subprocess
 import sys
 import numpy as np
 
-FF = r"D:/AstrBot/bin/ffmpeg.exe"
+
+def _ffmpeg() -> str:
+    """找 ffmpeg：环境变量 > PATH > 仓库自带 AstrBot 里那份。"""
+    if os.environ.get("FFMPEG_BIN"):
+        return os.environ["FFMPEG_BIN"]
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    from pathlib import Path
+    for up in range(1, 4):
+        cand = Path(__file__).resolve().parents[up] / "runtime" / "astrbot" / "bin" / "ffmpeg.exe"
+        if cand.is_file():
+            return str(cand)
+    return "ffmpeg"
+
+
+FF = _ffmpeg()
 SR = 16000
 
 

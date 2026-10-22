@@ -4,7 +4,7 @@
     python qqmusic_login.py
 
 运行后会生成 qq_login_qr.png，用手机 QQ 音乐 App 扫码确认，
-凭据保存到 D:/AstrBot/data/qqmusic_cred.json。
+凭据保存到 AstrBot 的 data/qqmusic_cred.json。
 
 说明：这是第三方库调用 QQ 音乐接口，非官方用法，账号存在被风控的可能，
 建议不要用主号，或控制调用频率。
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -21,8 +22,24 @@ from qqmusic_api import Client
 from qqmusic_api.models.login import QRCodeLoginEvents, QRLoginType
 
 TOOLS_DIR = Path(__file__).resolve().parent
+
+
+def _astrbot_home() -> Path:
+    """AstrBot 根目录：环境变量 > 跟着本文件走。
+
+    两个落脚点：仓库 <repo>/scripts/tools/、部署 <AstrBot>/tools/。
+    """
+    if os.environ.get("ASTRBOT_HOME"):
+        return Path(os.environ["ASTRBOT_HOME"])
+    here = Path(__file__).resolve()
+    if (here.parents[1] / "data").is_dir():      # <AstrBot>/tools/x.py
+        return here.parents[1]
+    return here.parents[2] / "runtime" / "astrbot"
+
+
+HOME = _astrbot_home()
 QR_PATH = TOOLS_DIR / "qq_login_qr.png"
-CRED_PATH = Path("D:/AstrBot/data/qqmusic_cred.json")
+CRED_PATH = HOME / "data" / "qqmusic_cred.json"
 STATUS_LOG = TOOLS_DIR / "login_status.log"
 
 POLL_INTERVAL = 2

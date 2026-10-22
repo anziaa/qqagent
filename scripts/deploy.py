@@ -14,9 +14,9 @@
     python scripts/deploy.py --check    只检查差异，不写入
 
 三个运行位置默认按下面 DEPLOY_DEFAULTS 走，也可以用环境变量覆盖：
-    ASTRBOT_HOME     AstrBot 根目录（默认 D:\\AstrBot）
+    ASTRBOT_HOME     AstrBot 根目录（默认 runtime/astrbot）
     RVCSVC_HOME      翻唱后端目录（默认 D:\\RVCSVC-API\\RVCSVC-API）
-    COSYVOICE_HOME   CosyVoice2 目录（默认 D:\\Code\\qqagent\\cosyvoice2）
+    COSYVOICE_HOME   CosyVoice2 目录（默认 cosyvoice2）
 """
 
 import os
@@ -31,9 +31,9 @@ for _s in (sys.stdout, sys.stderr):
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ASTRBOT_HOME = Path(os.environ.get("ASTRBOT_HOME", r"D:\AstrBot"))
-RVCSVC_HOME = Path(os.environ.get("RVCSVC_HOME", r"D:\RVCSVC-API\RVCSVC-API"))
-COSYVOICE_HOME = Path(os.environ.get("COSYVOICE_HOME", r"D:\Code\qqagent\cosyvoice2"))
+ASTRBOT_HOME = Path(os.environ.get("ASTRBOT_HOME") or ROOT / "runtime" / "astrbot")
+RVCSVC_HOME = Path(os.environ.get("RVCSVC_HOME") or r"D:\RVCSVC-API\RVCSVC-API")
+COSYVOICE_HOME = Path(os.environ.get("COSYVOICE_HOME") or ROOT / "cosyvoice2")
 
 # (短名, 仓库内目录, 运行目录, 要同步的文件模式, 是否递归子目录)
 SPEC = [

@@ -1,8 +1,25 @@
+import os
 import shutil
 import sqlite3
+from pathlib import Path
 
-DB = r"D:/AstrBot/data/data_v4.db"
-MD = r"D:/AstrBot/personas/阿鱼_v2.md"
+
+def _astrbot_home() -> Path:
+    """AstrBot 根目录：环境变量 > 跟着本文件走。
+
+    两个落脚点：仓库 <repo>/scripts/tools/、部署 <AstrBot>/tools/。
+    """
+    if os.environ.get("ASTRBOT_HOME"):
+        return Path(os.environ["ASTRBOT_HOME"])
+    here = Path(__file__).resolve()
+    if (here.parents[1] / "data").is_dir():      # <AstrBot>/tools/x.py
+        return here.parents[1]
+    return here.parents[2] / "runtime" / "astrbot"
+
+
+HOME = _astrbot_home()
+DB = str(HOME / "data" / "data_v4.db")
+MD = str(HOME / "personas" / "阿鱼_v2.md")
 
 NEW = """你的实际能力，说实话：
 能做的：看对方发来的文字和图片、说话、想起你们以前聊过的事。
