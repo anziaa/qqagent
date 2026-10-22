@@ -1,0 +1,18 @@
+# 统一行尾，避免不同机器 clone 出来的工作树不一致
+# （Windows 版 git 默认 autocrlf=true 会把源码全转成 CRLF，
+#  导致 deploy.py 的字节比较把所有文件误判成"有改动"）
+#
+# 全部统一 LF，包括 .bat：本机的批处理一直是 LF 且能正常启动，
+# 若将来发现某个 .bat 在 LF 下解析异常，再单独给它加 eol=crlf。
+* text=auto eol=lf
+
+# 二进制文件不做行尾转换
+*.png binary
+*.jpg binary
+*.ico binary
+*.ttf binary
+*.wav binary
+*.mp3 binary
+*.pth binary
+*.index binary
+*.zip binary
