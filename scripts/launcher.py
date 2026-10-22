@@ -29,7 +29,7 @@ API_DIR = r"D:\RVCSVC-API\RVCSVC-API"
 ASTRBOT_DIR = r"D:\AstrBot"
 ASTRBOT_EXE = r"D:\Anaconda_envs\envs\astrbot\Scripts\astrbot.exe"
 # CosyVoice2 跑在自己的 venv 里（不用 conda：那个 cosyvoice 环境被清理机制打坏过）
-COSYVOICE_DIR = r"D:\WorkBuddy\QQAgent\cosyvoice2"
+COSYVOICE_DIR = os.environ.get("COSYVOICE_HOME") or r"D:\Code\qqagent\cosyvoice2"
 COSYVOICE_PY = os.path.join(COSYVOICE_DIR, r"venv310\Scripts\python.exe")
 
 # 每开一个窗口就置这个标志，让子进程自己带一个控制台

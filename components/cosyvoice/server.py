@@ -21,6 +21,7 @@ mode:
 import argparse
 import io
 import json
+import os
 import sys
 import threading
 import time
@@ -29,7 +30,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
-ROOT = Path(r"D:/WorkBuddy/QQAgent/cosyvoice2")
+# 目录取自脚本自身位置，可用 COSYVOICE_HOME 覆盖。
+# 这样整个目录搬到别处、或换机器后都不用改代码。
+ROOT = Path(os.environ.get("COSYVOICE_HOME") or Path(__file__).resolve().parent).resolve()
 sys.path.insert(0, str(ROOT / "CosyVoice"))
 sys.path.insert(0, str(ROOT / "CosyVoice/third_party/Matcha-TTS"))
 
