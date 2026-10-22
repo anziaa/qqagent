@@ -1,0 +1,170 @@
+{
+  "rvc_base_url": {
+    "description": "RVC API Gradio 后端服务地址",
+    "type": "string",
+    "hint": "你的 Gradio API RVC 后端运行的地址，必须以 / 结尾",
+    "default": "http://127.0.0.1:7860/"
+  },
+  "svc_base_url": {
+    "description": "SVC API Gradio 后端服务地址",
+    "type": "string",
+    "hint": "你的 Gradio API SVC 后端运行的地址，必须以 / 结尾",
+    "default": "http://127.0.0.1:7866/"
+  },
+  "default_api": {
+    "description": "默认使用的音乐 API",
+    "type": "string",
+    "hint": "可选 'netease' 或 'netease_nodejs'，推荐使用 'netease_nodejs'",
+    "default": "netease_nodejs"
+  },
+  "nodejs_base_url": {
+    "description": "网易云音乐 Node.js API 地址",
+    "type": "string",
+    "hint": "仅在 default_api 设置为 'netease_nodejs' 时生效",
+    "default": "https://wyy.xhily.com"
+  },
+  "timeout": {
+    "description": "等待用户选择的超时时间（秒）",
+    "type": "int",
+    "hint": "等待用户选择歌曲或模型的最大时间",
+    "default": 30
+  },
+  "inference_timeout": {
+    "description": "AI推理超时时间（秒）",
+    "type": "int",
+    "hint": "等待后端完成音频转换的最大时间，如果经常超时可以调大这个值",
+    "default": 300
+  },
+  "rvc_models_keywords": {
+    "description": "RVC 模型别名配置",
+    "type": "list",
+    "hint": "这是一个列表，每行一个模型。格式为 '模型文件名|||别名'。如果|||后面为空，则直接显示文件名。使用 /刷新rvc模型 命令自动获取",
+    "default": []
+  },
+  "svc_models_keywords": {
+    "description": "SVC 模型别名配置",
+    "type": "list",
+    "hint": "这是一个列表，每行一个模型。格式为 '模型文件名|||别名'。如果|||后面为空，则直接显示文件名。使用 /刷新svc模型 命令自动获取",
+    "default": []
+  },
+  "sing_model": {
+    "description": "自主翻唱使用的音色",
+    "type": "string",
+    "hint": "填模型文件名（如 frieren1.1.pth）。留空则用 rvc_models_keywords 的第一项",
+    "default": "frieren1.1.pth"
+  },
+  "sing_clip_seconds": {
+    "description": "自主翻唱发送的片段长度（秒）",
+    "type": "int",
+    "hint": "QQ 单条语音上限 60 秒，建议 12~25",
+    "default": 18
+  },
+  "sing_cooldown": {
+    "description": "同一个人的翻唱冷却时间（秒）",
+    "type": "int",
+    "hint": "每次推理要占用 GPU，防止被连续点歌拖住；填 0 表示不限制",
+    "default": 30
+  },
+  "full_segment_seconds": {
+    "description": "唱整首时每条语音的时长（秒）",
+    "type": "int",
+    "hint": "QQ 单条语音上限 60 秒，建议 45~56",
+    "default": 55
+  },
+  "full_max_segments": {
+    "description": "唱整首时最多发几条语音",
+    "type": "int",
+    "hint": "8 条约 7 分钟。超出的部分不唱，避免一口气刷屏",
+    "default": 8
+  },
+  "sing_full_cache_enable": {
+    "description": "翻唱复用成品缓存（整首 + 片段）",
+    "type": "bool",
+    "hint": "开启后，同一首歌 + 同一音色 + 同一升降调：整首直接复用上次的成品，片段从这份成品里截一段。两者都跳过搜索、取链、下载、分离和推理，基本秒回。片段每次截的位置仍然不同（会避开刚唱过的）。关掉则一律重做。",
+    "default": true
+  },
+  "sing_full_cache_max": {
+    "description": "整首成品最多保留几首",
+    "type": "int",
+    "hint": "超出后按最久未使用淘汰。一首约 5-7 MB，50 首约 300 MB。填 0 表示不限制。注意：唱片段时后端跑的也是整首，所以片段也会攒下整首成品。",
+    "default": 50
+  },
+  "sing_src_cache_max": {
+    "description": "本地源曲最多保留几首",
+    "type": "int",
+    "hint": "已经下过的源曲留着，下次点同一首歌就不用重新下载。超出后按最久未使用淘汰，一首约 5-11 MB，30 首约 250 MB。填 0 表示不限制",
+    "default": 30
+  },
+  "rvc_webui_url": {
+    "description": "RVC WebUI 地址（说话换音色用）",
+    "type": "string",
+    "hint": "说话不走 UVR 分离，直接把 TTS 音频喂给 WebUI 的单条推理。默认 7897，不需要结尾的 /",
+    "default": "http://127.0.0.1:7897"
+  },
+  "speak_engine": {
+    "description": "说话走哪条链路",
+    "type": "string",
+    "hint": "cosyvoice = CosyVoice2 直出，音色和韵律一起生成，有情感（推荐）；rvc = 老的 edge-tts 换音色，出来是念稿味。选 cosyvoice 时如果 7870 没开会自动回落到 rvc",
+    "default": "cosyvoice"
+  },
+  "cosyvoice_url": {
+    "description": "CosyVoice2 服务地址",
+    "type": "string",
+    "hint": "常驻 TTS 服务，一键启动脚本会把它拉在 7870；结尾不要带 /",
+    "default": "http://127.0.0.1:7870"
+  },
+  "speak_style": {
+    "description": "默认情感指令",
+    "type": "string",
+    "hint": "发给 CosyVoice2 的自然语言语气描述。LLM 每次调用可以自己覆盖这条，更贴合当句语境",
+    "default": "用自然、亲切、像真人说话的语气，带一点情绪起伏"
+  },
+  "speak_model": {
+    "description": "说话使用的音色",
+    "type": "string",
+    "hint": "填模型文件名（如 frieren1.1.pth）。留空则跟 sing_model 一致，这样说话和唱歌是同一个人",
+    "default": ""
+  },
+  "speak_voice": {
+    "description": "TTS 底音（会被换成上面的音色）",
+    "type": "string",
+    "hint": "微软 Edge TTS 音色名。女声：zh-CN-XiaoxiaoNeural（温柔）、zh-CN-XiaoyiNeural（年轻活泼）、zh-CN-liaoning-XiaobeiNeural（东北）",
+    "default": "zh-CN-XiaoyiNeural"
+  },
+  "speak_rate": {
+    "description": "语速",
+    "type": "string",
+    "hint": "Edge TTS 格式，例如 +0%、+10%（快一点）、-10%（慢一点）",
+    "default": "+0%"
+  },
+  "speak_pitch": {
+    "description": "TTS 音调",
+    "type": "string",
+    "hint": "Edge TTS 格式，例如 +0Hz、+20Hz。一般不用改，音色由 RVC 决定",
+    "default": "+0Hz"
+  },
+  "speak_key_shift": {
+    "description": "说话时的变调（半音）",
+    "type": "int",
+    "hint": "0 = 保持原调。觉得声音偏闷往 +1/+2 调，偏尖往 -1/-2 调",
+    "default": 0
+  },
+  "speak_cooldown": {
+    "description": "同一个人的语音冷却时间（秒）",
+    "type": "int",
+    "hint": "每条语音都要跑一次推理，防止刷屏式发语音；填 0 表示不限制",
+    "default": 8
+  },
+  "speak_max_chars": {
+    "description": "单条语音最多多少字",
+    "type": "int",
+    "hint": "超出的部分会被截断（在句读处）。90 字约 20 秒，别设太大，QQ 单条语音上限 60 秒",
+    "default": 90
+  },
+  "rvc_index_dir": {
+    "description": "RVC 索引目录（.index 所在文件夹）",
+    "type": "string",
+    "hint": "说话走的是 7897 单条推理，不会自动配索引；填了这个目录后，会按模型名去找同名的 .index。翻唱走 7860，由后端自己配，不受这里影响。留空表示不用索引",
+    "default": ""
+  }
+}
