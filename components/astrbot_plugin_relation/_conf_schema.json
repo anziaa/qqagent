@@ -9,7 +9,7 @@
     "description": "主人 QQ 号",
     "type": "string",
     "hint": "多个用逗号分隔。主人身份从这里读，聊天里谁说自己是主人都不生效。AstrBot 管理员列表里的人也自动算主人",
-    "default": "100000000"
+    "default": ""
   },
   "notes_max": {
     "description": "每个人最多记几条要点",

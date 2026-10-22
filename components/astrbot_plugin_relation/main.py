@@ -108,7 +108,7 @@ class RelationPlugin(Star):
     @property
     def owner_qqs(self) -> set[str]:
         """主人 QQ 集合：配置 + AstrBot 管理员。每轮现算，不落库。"""
-        raw = self.cfg.get("owner_qqs", "100000000") if hasattr(self.cfg, "get") else ""
+        raw = self.cfg.get("owner_qqs", "") if hasattr(self.cfg, "get") else ""
         if isinstance(raw, (list, tuple)):
             items = raw
         else:
@@ -124,7 +124,7 @@ class RelationPlugin(Star):
                     owners.add(str(x).strip())
         except Exception:
             pass
-        return owners or {"100000000"}
+        return owners
 
     def is_owner(self, user_id) -> bool:
         return str(user_id or "").strip() in self.owner_qqs

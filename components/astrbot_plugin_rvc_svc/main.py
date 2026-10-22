@@ -28,6 +28,20 @@ from .qqsource import QQSource
 MODEL_ALIAS_SEPARATOR = "|||"
 
 
+def _self_uin(event) -> int:
+    """合并转发节点里显示的发送者 QQ：取机器人自身账号，取不到就用占位值。
+
+    别写死成某个具体账号——换了机器人号之后合并转发会顶着别人的头像。
+    """
+    try:
+        raw = str(event.get_self_id() or "")
+        if raw.isdigit():
+            return int(raw)
+    except Exception:
+        pass
+    return 10000
+
+
 def _ensure_ffmpeg_on_path() -> None:
     """把 AstrBot 自带的 ffmpeg 目录塞进本进程的 PATH。
 
@@ -503,7 +517,7 @@ class MusicPlugin(Star):
             display_str = display_str or "未发现任何模型。"
             chain=[Plain(f"当前 RVC 可用模型：\n{display_str}")]
             node = Node(
-                uin=10000,
+                uin=_self_uin(event),
                 name="玖玖瑠",
                 content=chain
             )
@@ -544,7 +558,7 @@ class MusicPlugin(Star):
             display_str = display_str or "未发现任何模型。"
             chain=[Plain(f"当前 SVC 可用模型：\n{display_str}")]
             node = Node(
-                uin=10000,
+                uin=_self_uin(event),
                 name="玖玖瑠",
                 content=chain
             )
@@ -638,7 +652,7 @@ class MusicPlugin(Star):
         
         chain=[Plain(f"已选歌曲: {selected_song['name']}\n使用: {api_type.upper()}\n\n可用模型：\n{display_str}")]
         node = Node(
-            uin=10000,
+            uin=_self_uin(event),
             name="玖玖瑠",
             content=chain
         )
@@ -702,7 +716,7 @@ class MusicPlugin(Star):
         formatted_songs = [f"{i + 1}. {s['name']} - {s['artists']}" for i, s in enumerate(songs[:10])]
         chain=[Plain("为您找到以下歌曲：\n" + "\n".join(formatted_songs))]
         node = Node(
-            uin=10000,
+            uin=_self_uin(event),
             name="玖玖瑠",
             content=chain
         )
