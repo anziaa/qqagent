@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -76,10 +76,11 @@ class AutoCollectJob:
 
     Args:
         snapshot_path: 在消息事件结束前创建的插件自有图片快照路径。
-        target_pack_id: 最终接收图片的表情包 ID。
+        target_pack_id: 兜底接收包，分类没有归属信息时写入该包。
         categories: 用于识别分类的运行时分类描述。
         source_kind: 来源类型，值为 ``group`` 或 ``user``。
         source_id: 原始群聊或个人用户 ID。
+        category_packs: 分类到声明它的资源包的映射，决定图片最终写进哪个包。
     """
 
     snapshot_path: Path
@@ -88,6 +89,7 @@ class AutoCollectJob:
     source_kind: str
     source_id: str
     digest: str = ""
+    category_packs: dict[str, str] = field(default_factory=dict)
 
 
 class AutoCollectManager:
@@ -376,10 +378,16 @@ class AutoCollectManager:
                     )
                     return False
                 categories = load_pack_category_mapping(target_pack_id)
+                category_packs = {
+                    category: target_pack_id for category in categories
+                }
             else:
+                # 未固定目标包时按绑定的多个包合并识别，图片按分类归属落盘，
+                # 否则非主包声明的分类（例如人设包）永远不会被模型看到。
                 context = self.plugin._resolve_runtime_pack_context(event=event)
                 target_pack_id = str(context.get("pack_id") or "").strip()
                 categories = dict(context.get("category_mapping") or {})
+                category_packs = dict(context.get("category_packs") or {})
         except Exception as exc:
             logger.warning("[meme_manager] 解析自动收集目标失败：%s", exc)
             return False
@@ -416,6 +424,7 @@ class AutoCollectManager:
             source_kind,
             source_id,
             message_key,
+            category_packs,
         )
         if any(
             str(image.url or image.file or "").startswith(("https://", "http://"))
@@ -437,16 +446,18 @@ class AutoCollectManager:
         source_kind: str,
         source_id: str,
         message_key: str,
+        category_packs: dict[str, str] | None = None,
     ) -> bool:
         """依次提交同一消息的候选图片，让来源冷却只拦截后续消息。
 
         Args:
             images: 平台标记的图片优先，其余按消息顺序排列的候选图片。
-            target_pack_id: 接收候选图片的表情包 ID。
+            target_pack_id: 兜底接收候选图片的表情包 ID。
             categories: 目标表情包的分类描述。
             source_kind: 群聊或个人消息来源类型。
             source_id: 用于冷却检查的来源 ID。
             message_key: 用于排除平台重复投递的消息标识。
+            category_packs: 分类到声明它的资源包的映射。
 
         Returns:
             至少有一张图片进入识别队列时返回 True。
@@ -464,6 +475,7 @@ class AutoCollectManager:
                 marked=marked,
                 message_key=message_key,
                 message_seen=message_seen,
+                category_packs=category_packs,
             )
             queued = queued or accepted
         return queued
@@ -571,12 +583,13 @@ class AutoCollectManager:
         marked: bool = True,
         message_key: str = "",
         message_seen: set[str] | None = None,
+        category_packs: dict[str, str] | None = None,
     ) -> bool:
         """先为候选图片创建快照并预留摘要，再检查冷却时间。
 
         Args:
             image: 与消息事件独立的候选图片组件。
-            target_pack_id: 接收候选图片的表情包 ID。
+            target_pack_id: 兜底接收候选图片的表情包 ID。
             categories: 目标表情包的分类描述。
             source_kind: 群聊或个人消息来源类型。
             source_id: 用于冷却检查的来源 ID。
@@ -584,6 +597,7 @@ class AutoCollectManager:
             marked: 平台是否明确将图片标为表情。
             message_key: 用于排除平台重复投递的消息标识。
             message_seen: 同一消息已经处理过的图片摘要。
+            category_packs: 分类到声明它的资源包的映射。
 
         Returns:
             快照是否成功进入识别队列。
@@ -731,6 +745,7 @@ class AutoCollectManager:
                     source_kind=source_kind,
                     source_id=source_id,
                     digest=digest,
+                    category_packs=dict(category_packs or {}),
                 )
             )
             queued = True
@@ -1060,6 +1075,8 @@ class AutoCollectManager:
         extension: str,
         category: str,
         decision: dict[str, Any],
+        *,
+        pack_id: str | None = None,
     ) -> None:
         """将已收集图片保存到所属表情包的独立待审箱。
 
@@ -1070,7 +1087,9 @@ class AutoCollectManager:
             extension: 可信的扩展名。
             category: 建议的目标分类。
             decision: 已规范化的视觉识别结果。
+            pack_id: 归属表情包 ID，省略时写入任务兜底包。
         """
+        target_pack_id = str(pack_id or job.target_pack_id)
         async with self._inbox_lock:
             metadata = self._load_json(
                 AUTO_COLLECT_INBOX_METADATA_PATH,
@@ -1080,18 +1099,18 @@ class AutoCollectManager:
             if not isinstance(items, dict):
                 items = {}
                 metadata["items"] = items
-            record_id = f"{job.target_pack_id}:{digest}"
+            record_id = f"{target_pack_id}:{digest}"
             if record_id in items:
                 logger.info(
                     "[meme_manager] 自动收集跳过图片：保存时发现图片已在待审箱，表情包：%s，图片摘要：%s",
-                    job.target_pack_id,
+                    target_pack_id,
                     digest[:12],
                 )
                 return
             if (
                 sum(
                     isinstance(item, dict)
-                    and item.get("target_pack_id") == job.target_pack_id
+                    and item.get("target_pack_id") == target_pack_id
                     for item in items.values()
                 )
                 >= self.pending_limit
@@ -1099,19 +1118,19 @@ class AutoCollectManager:
                 self.counters["inbox_full"] = self.counters.get("inbox_full", 0) + 1
                 logger.info(
                     "[meme_manager] 自动收集跳过图片：待审箱已满，表情包：%s，图片摘要：%s",
-                    job.target_pack_id,
+                    target_pack_id,
                     digest[:12],
                 )
                 return
             AUTO_COLLECT_INBOX_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-            filename = f"{job.target_pack_id}__{digest}{extension}"
+            filename = f"{target_pack_id}__{digest}{extension}"
             target = AUTO_COLLECT_INBOX_IMAGES_DIR / filename
             temporary = AUTO_COLLECT_INBOX_IMAGES_DIR / f".{filename}.tmp"
             temporary.write_bytes(content)
             os.replace(temporary, target)
             items[record_id] = {
                 "id": record_id,
-                "target_pack_id": job.target_pack_id,
+                "target_pack_id": target_pack_id,
                 "content_sha256": digest,
                 "filename": filename,
                 "suggested_category": category,
@@ -1124,7 +1143,7 @@ class AutoCollectManager:
         self.counters["collected"] = self.counters.get("collected", 0) + 1
         logger.info(
             "[meme_manager] 已收集图片，等待审核；表情包：%s，分类：%s",
-            job.target_pack_id,
+            target_pack_id,
             category,
         )
 
@@ -1222,9 +1241,25 @@ class AutoCollectManager:
             < self.min_category_confidence
         ):
             category = REVIEW_CATEGORY
+        # 分类决定图片归属哪个资源包：合并识别时模型可能选中非主包声明的分类，
+        # 写入必须跟着分类走，否则人设包的分类永远收不到图。
+        owner_pack_id = job.category_packs.get(category) or job.target_pack_id
+        if owner_pack_id != job.target_pack_id and await asyncio.to_thread(
+            self._pack_contains_digest, owner_pack_id, digest
+        ):
+            self.counters["duplicate_or_rejected"] = (
+                self.counters.get("duplicate_or_rejected", 0) + 1
+            )
+            logger.info(
+                "[meme_manager] 自动收集跳过图片：归属表情包中已有相同图片，表情包：%s，图片摘要：%s",
+                owner_pack_id,
+                digest[:12],
+            )
+            return
+        owner_memes_dir = get_pack_paths(owner_pack_id)["memes_dir"]
         match = await asyncio.to_thread(
             _IMAGE_INDEX.lookup,
-            get_pack_paths(job.target_pack_id)["memes_dir"],
+            owner_memes_dir,
             digest,
             job.snapshot_path,
         )
@@ -1232,30 +1267,36 @@ class AutoCollectManager:
             decision = {
                 **decision,
                 "near_duplicate": str(
-                    match.similar_path.relative_to(
-                        get_pack_paths(job.target_pack_id)["memes_dir"]
-                    )
+                    match.similar_path.relative_to(owner_memes_dir)
                 ).replace("\\", "/"),
             }
-        await self._save_to_inbox(job, content, digest, extension, category, decision)
+        await self._save_to_inbox(
+            job,
+            content,
+            digest,
+            extension,
+            category,
+            decision,
+            pack_id=owner_pack_id,
+        )
         if not self.manual_review:
             try:
                 await self.accept_pending(
-                    job.target_pack_id,
-                    [{"id": f"{job.target_pack_id}:{digest}"}],
+                    owner_pack_id,
+                    [{"id": f"{owner_pack_id}:{digest}"}],
                     manual_confirmed=False,
                 )
             except RuntimeError:
                 self.counters["pack_busy"] = self.counters.get("pack_busy", 0) + 1
                 logger.info("[meme_manager] 表情包正在处理，已收集图片保留在待审箱")
-                self._pending_auto_accept.setdefault(job.target_pack_id, set()).add(
-                    f"{job.target_pack_id}:{digest}"
+                self._pending_auto_accept.setdefault(owner_pack_id, set()).add(
+                    f"{owner_pack_id}:{digest}"
                 )
-                task = self._auto_accept_tasks.get(job.target_pack_id)
+                task = self._auto_accept_tasks.get(owner_pack_id)
                 if task is None or task.done():
-                    self._auto_accept_tasks[job.target_pack_id] = asyncio.create_task(
-                        self._retry_auto_accept(job.target_pack_id),
-                        name=f"meme_manager_auto_accept_{job.target_pack_id}",
+                    self._auto_accept_tasks[owner_pack_id] = asyncio.create_task(
+                        self._retry_auto_accept(owner_pack_id),
+                        name=f"meme_manager_auto_accept_{owner_pack_id}",
                     )
 
     async def pending_status(self, pack_id: str) -> dict[str, Any]:

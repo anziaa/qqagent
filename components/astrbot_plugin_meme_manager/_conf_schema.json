@@ -292,7 +292,7 @@
         "description": "目标表情包 ID",
         "type": "string",
         "default": "",
-        "hint": "留空时使用当前会话按 session/persona/default 规则选中的表情包；填写后固定以该包的分类进行识别，待审核图片也归属该包"
+        "hint": "留空时合并识别所有已绑定资源包的分类，图片按分类所属的包落盘（人设包的分类也能收到图）；填写后固定只识别并写入该包"
       },
       "sampling_probability": {
         "description": "平台表情图片抽样概率（%）",

@@ -226,18 +226,28 @@ def resolve_pack_context(
         persona_id: Optional persona identifier for persona-scoped rules.
 
     Returns:
-        Context dict with pack_id, pack_ids, paths, and merged category_mapping.
+        Context dict with pack_id, pack_ids, paths, merged category_mapping,
+        and category_packs mapping each category to its owning pack.
     """
     pack_ids = resolve_pack_ids(session_id=session_id, persona_id=persona_id)
     primary_pack_id = pack_ids[0] if pack_ids else DEFAULT_PACK_ID
     paths = get_pack_paths(primary_pack_id)
     pack_dirs = {pack_id: get_pack_paths(pack_id)["pack_dir"] for pack_id in pack_ids}
 
+    pack_mappings = {
+        pack_id: load_pack_category_mapping(pack_id) for pack_id in pack_ids
+    }
     # Merge category mappings from all packs (primary takes precedence).
     merged_mapping = {}
     for pack_id in reversed(pack_ids):
-        pack_mapping = load_pack_category_mapping(pack_id)
-        merged_mapping.update(pack_mapping)
+        merged_mapping.update(pack_mappings[pack_id])
+
+    # 记录每个分类由哪个包声明，供写入路径决定图片落盘位置。
+    # 与 merged_mapping 保持一致：主包先声明则归主包。
+    category_packs: dict[str, str] = {}
+    for pack_id in pack_ids:
+        for category in pack_mappings[pack_id]:
+            category_packs.setdefault(category, pack_id)
 
     return {
         "pack_id": primary_pack_id,
@@ -248,4 +258,5 @@ def resolve_pack_context(
         "metadata_path": paths["metadata_path"],
         "manifest_path": paths["manifest_path"],
         "category_mapping": merged_mapping,
+        "category_packs": category_packs,
     }

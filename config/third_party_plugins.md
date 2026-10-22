@@ -34,7 +34,8 @@ git clone --depth 1 <仓库地址> <插件目录名>
 
 ### meme_manager 的本地改动
 
-基线是上游 **v5.2.4**。改动文件：`mixins/event_handlers.py`。
+基线是上游 **v5.2.4**。改动文件：`mixins/event_handlers.py`、`mixins/commands.py`、
+`backend/auto_collect.py`、`backend/packs/resolver.py`、`_conf_schema.json`。
 
 1. **`/表情管理 添加表情` 存不下本地图片**（上游 bug）。
    入参图片的 `img.url` 是 AstrBot 落盘后的 Windows 路径（`D:\...\data\temp\media_*.jpg`），
@@ -48,8 +49,15 @@ git clone --depth 1 <仓库地址> <插件目录名>
    `/查看表情包` 提示）。现在校验用合并映射，并按"哪 个包声明了这个分类"把图写回那个包。
    仍然只操作主包的指令：`添加/重命名/删除/清空指定类型`——这类管理动作想动哪个包，
    先在 WebUI 里把那个包设为默认。
+4. **自动收集把图片一律写进固定包**：`auto_collect.target_pack_id` 只要填了值，`submit()`
+   就只加载那一个包的分类映射，模型根本看不到其它包（例如人设包）的分类，收进来的图也
+   全落那个包。现在留空时会用**合并映射**识别，并按「分类由哪个包声明」落盘
+   （`resolver.resolve_pack_context()` 新增 `category_packs` 返回值，`AutoCollectJob`
+   带上它，`_process_job` 据此选归属包，并补一次归属包的重复检查）。
+   `target_pack_id` 现在只是**兜底包**：分类无法确定（待审分类）时用它。
+   填写该值的旧行为保留——固定只识别、只写入该包。
 
-升级上游时先 clone 新版到临时目录，`diff -rq` 出差异，把上面两处改动重新打上。
+升级上游时先 clone 新版到临时目录，`diff -rq` 出差异，把上面这些改动重新打上。
 运行目录里的 `.git` 是当初 `git clone` 留下的，**只用来对比上游**——不要在运行目录
 `git pull` 或手改代码，那里会被 `scripts/deploy.py` 覆盖。
 
