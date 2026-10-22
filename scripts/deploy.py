@@ -81,6 +81,26 @@ SPEC = [
         True,
     ),
     (
+        "meme_manager",
+        "components/astrbot_plugin_meme_manager",
+        ASTRBOT_HOME / "data" / "plugins" / "astrbot_plugin_meme_manager",
+        [
+            "*.py",
+            "*.json",
+            "*.yaml",
+            "*.md",
+            "*.txt",
+            "*.html",
+            "*.js",
+            "*.mjs",
+            "*.css",
+            "*.png",
+            "*.woff2",
+            "LICENSE",
+        ],
+        True,
+    ),
+    (
         "rvc_api",
         "components/rvc_api",
         RVCSVC_HOME,
@@ -117,6 +137,7 @@ RESTART_HINT = {
     "music": "重启 AstrBot",
     "qzone": "重启 AstrBot",
     "favourpro": "重启 AstrBot",
+    "meme_manager": "热重载插件即可（改了 mixins/ 建议重启 AstrBot）",
     "rvc_api": "重启 7860 RVC 转换 API",
     "cosyvoice": "重启 7870 CosyVoice2",
     "scripts": "重新执行 一键启动服务.bat",
@@ -125,6 +146,9 @@ RESTART_HINT = {
 
 # 这些路径不参与同步：运行时数据、缓存
 SKIP_PARTS = {"__pycache__", "data", "output", "temp", "logs", ".git"}
+
+# 插件会把用户配置写回这些文件，不能用仓库里的空模板覆盖掉
+SKIP_REL = {"image_host/config.json"}
 
 
 def collect(src_dir: Path, patterns: list[str], recursive: bool = False) -> list[PurePath]:
@@ -141,6 +165,8 @@ def collect(src_dir: Path, patterns: list[str], recursive: bool = False) -> list
                 continue
             rel = p.relative_to(src_dir)
             if SKIP_PARTS & set(rel.parts) or p.suffix == ".pyc":
+                continue
+            if rel.as_posix() in SKIP_REL:
                 continue
             files.append(rel)
     return sorted(set(files))

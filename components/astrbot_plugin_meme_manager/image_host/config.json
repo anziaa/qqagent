@@ -1,0 +1,18 @@
+{
+  "stardots": {
+    "key": "",
+    "secret": "",
+    "space": "",
+    "local_dir": ""
+  },
+  "cloudflare_r2": {
+    "account_id": "",
+    "access_key_id": "",
+    "secret_access_key": "",
+    "bucket_name": "",
+    "public_url": "",
+    "local_dir": ""
+  },
+  "provider": "stardots",
+  "local_dir": ""
+}

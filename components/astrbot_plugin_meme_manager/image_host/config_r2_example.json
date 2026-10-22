@@ -1,0 +1,18 @@
+{
+  "stardots": {
+    "key": "",
+    "secret": "",
+    "space": "",
+    "local_dir": ""
+  },
+  "cloudflare_r2": {
+    "account_id": "your_account_id_here",
+    "access_key_id": "your_access_key_id_here",
+    "secret_access_key": "your_secret_access_key_here",
+    "bucket_name": "your_bucket_name",
+    "public_url": "https://cdn.yourdomain.com",
+    "local_dir": ""
+  },
+  "provider": "cloudflare_r2",
+  "local_dir": "path/to/your/local/images"
+}
