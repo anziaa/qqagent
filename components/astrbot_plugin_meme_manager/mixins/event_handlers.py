@@ -765,7 +765,10 @@ class EventHandlerMixin:
         current_pack_id = str(
             self._resolve_runtime_pack_context(event=event).get("pack_id") or ""
         ).strip()
-        if current_pack_id != pack_id:
+        # 分类可能属于非主包，pack_id 记的是"拥有这个分类的包"，
+        # 因此这里只校验主包没被切换过。
+        expected_primary = str(upload_state.get("primary_pack_id") or pack_id).strip()
+        if current_pack_id != expected_primary:
             del self.upload_states[user_key]
             yield event.plain_result("默认资源包已切换，请重新执行添加表情命令。")
             return

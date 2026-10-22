@@ -13,6 +13,7 @@ from ..backend.packs.images import (
     clear_category_emojis,
     get_emoji_by_category,
 )
+from ..backend.packs.resolver import get_pack_paths, load_pack_category_mapping
 from ..backend.packs.storage import install_first_official_pack_from_index
 from ..backend.semantic.storage import invalidate_semantic_metadata
 from ..config import COMMUNITY_INDEX_URL
@@ -187,18 +188,32 @@ class CommandMixin:
                 "📌 若要添加表情，请按照此格式操作：\n/表情管理 添加表情 [类别名称]\n（输入/查看图库 可获取类别列表）"
             )
             return
-        descriptions = await asyncio.to_thread(self.category_manager.get_descriptions)
+        # 多包绑定时分类可能来自其它包，校验要用合并后的映射，否则官方包的
+        # 分类会被误判成"无效类别"。
+        pack_context = self._resolve_runtime_pack_context(event=event)
+        descriptions = pack_context.get("category_mapping") or {}
         if category not in descriptions:
             yield event.plain_result(
-                f"您输入的表情包类别「{category}」是无效的哦。\n可以使用/查看表情包来查看可用的类别。"
+                f"您输入的表情包类别「{category}」是无效的哦。\n可以使用/表情管理 查看图库来查看可用的类别。"
             )
             return
+        # 图要写回"声明了这个分类"的资源包，而不是主包
+        owner_pack_id = str(pack_context.get("pack_id") or "")
+        owner_memes_dir = str(pack_context.get("memes_dir") or "")
+        for pack_id in pack_context.get("pack_ids") or []:
+            try:
+                if category in load_pack_category_mapping(pack_id):
+                    owner_pack_id = str(pack_id)
+                    owner_memes_dir = str(get_pack_paths(pack_id)["memes_dir"])
+                    break
+            except Exception:
+                continue
         user_key = f"{event.session_id}_{event.get_sender_id()}"
-        pack_context = self._resolve_runtime_pack_context(event=event)
         self.upload_states[user_key] = {
             "category": category,
-            "pack_id": str(pack_context.get("pack_id") or ""),
-            "memes_dir": str(pack_context.get("memes_dir") or ""),
+            "pack_id": owner_pack_id,
+            "memes_dir": owner_memes_dir,
+            "primary_pack_id": str(pack_context.get("pack_id") or ""),
             "expire_time": time.time() + 30,
         }
         yield event.plain_result(
