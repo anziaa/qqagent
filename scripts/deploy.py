@@ -34,6 +34,18 @@ SPEC = [
         ["*.py", "*.json", "*.yaml", "*.md", "*.txt", "LICENSE"],
     ),
     (
+        "relation",
+        "components/astrbot_plugin_relation",
+        r"D:\AstrBot\data\plugins\astrbot_plugin_relation",
+        ["*.py", "*.json", "*.yaml", "*.txt"],
+    ),
+    (
+        "self_profile",
+        "components/astrbot_plugin_self_profile",
+        r"D:\AstrBot\data\plugins\astrbot_plugin_self_profile",
+        ["*.py", "*.json", "*.yaml", "*.txt"],
+    ),
+    (
         "rvc_api",
         "components/rvc_api",
         r"D:\RVCSVC-API\RVCSVC-API",
@@ -51,13 +63,22 @@ SPEC = [
         r"D:\AstrBot",
         ["launcher.py", "*.bat"],
     ),
+    (
+        "tools",
+        "scripts/tools",
+        r"D:\AstrBot\tools",
+        ["*.py"],
+    ),
 ]
 
 RESTART_HINT = {
     "plugin": "重启 AstrBot（插件热重载有时不干净）",
+    "relation": "重启 AstrBot",
+    "self_profile": "重启 AstrBot",
     "rvc_api": "重启 7860 RVC 转换 API",
     "cosyvoice": "重启 7870 CosyVoice2",
     "scripts": "重新执行 一键启动服务.bat",
+    "tools": "不用重启，脚本按需手动跑",
 }
 
 

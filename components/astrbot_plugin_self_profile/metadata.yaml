@@ -1,0 +1,6 @@
+name: astrbot_plugin_self_profile
+display_name: 账号资料
+desc: 让机器人查看/修改自己 QQ 的资料，也能查看对方的资料卡
+version: v1.0.0
+author: WorkBuddy
+help: /我的资料、/ta资料 [@某人|QQ号]、/改昵称 <名字>、/改签名 <一句话>、/改头像（附图或回复图片）

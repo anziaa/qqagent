@@ -6,11 +6,17 @@ QQ 语音机器人：AstrBot 插件 + RVC 翻唱后端 + CosyVoice2 情感语音
 
 | 目录 | 组件 | 运行位置 |
 |---|---|---|
-| `components/astrbot_plugin_rvc_svc/` | 语音/翻唱插件（`sing_song` / `send_voice` 两个 LLM 工具） | `D:\AstrBot\data\plugins\` |
+| `components/astrbot_plugin_rvc_svc/` | 语音/翻唱插件（`sing_song` / `send_voice` 两个 LLM 工具），上游 fork 后大改 | `D:\AstrBot\data\plugins\` |
+| `components/astrbot_plugin_relation/` | 关系记忆插件（记住和每个人的关系与熟悉度） | `D:\AstrBot\data\plugins\` |
+| `components/astrbot_plugin_self_profile/` | 账号资料插件（查看/修改自己 QQ 资料、看对方资料卡） | `D:\AstrBot\data\plugins\` |
 | `components/rvc_api/` | 7860 翻唱接口，`/convert`（UVR 分离 → RVC 推理 → 混音） | `D:\RVCSVC-API\RVCSVC-API\` |
 | `components/cosyvoice/` | 7870 情感语音合成服务 | `D:\WorkBuddy\QQAgent\cosyvoice2\` |
-| `scripts/` | 服务编排、启动脚本、诊断工具 | `D:\AstrBot\` |
-| `config/` | 插件配置、人设、音色参考音频 | `D:\AstrBot\` |
+| `scripts/` | 服务编排、启动脚本、部署脚本、诊断工具 | `D:\AstrBot\` |
+| `scripts/tools/` | QQ 音乐扫码登录、人设改名、会员链路测试等一次性工具 | `D:\AstrBot\tools\` |
+| `config/` | 插件配置、人设、音色参考音频、第三方插件清单 | `D:\AstrBot\` |
+
+第三方插件（`favourpro` / `music` / `qzone` / `proactive_chat`）有自己的上游仓库，
+不入库，版本与地址记在 `config/third_party_plugins.md`。
 
 ## 服务拓扑
 

@@ -1,0 +1,20 @@
+{
+  "enable": {
+    "description": "启用关系记忆",
+    "type": "bool",
+    "hint": "关掉后不再注入“眼前这个人/主人规则”，也不再统计消息数",
+    "default": true
+  },
+  "owner_qqs": {
+    "description": "主人 QQ 号",
+    "type": "string",
+    "hint": "多个用逗号分隔。主人身份从这里读，聊天里谁说自己是主人都不生效。AstrBot 管理员列表里的人也自动算主人",
+    "default": "100000000"
+  },
+  "notes_max": {
+    "description": "每个人最多记几条要点",
+    "type": "int",
+    "hint": "超出后自动丢掉最早的那条。8 条大约占 150 token",
+    "default": 8
+  }
+}

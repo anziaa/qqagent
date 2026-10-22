@@ -1,0 +1,6 @@
+name: astrbot_plugin_relation
+display_name: 关系记忆
+desc: 记住和每个人的关系与熟悉度；主人固定按 QQ 号认，别人改不了
+version: v1.0.0
+author: WorkBuddy
+help: /关系 [QQ号]、/关系列表（主人）、/忘掉 <QQ号> [关键词]（主人）
