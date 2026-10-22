@@ -22,10 +22,24 @@
 
 | 分类键 | 什么时候用 | 现有图 |
 | --- | --- | --- |
+| `ayu-hello` | 打招呼/自我介绍：被问「你是谁」「长什么样」，需要露出真实模样 | 1 |
 | `ayu-selfie` | 日常自拍/生活照：说明自己在干嘛、在哪、状态如何 | 0 |
 | `ayu-cute` | 撒娇卖萌：求关注、想要什么、被哄（≤1 次/对话） | 0 |
 | `ayu-shy` | 害羞：被夸好看、被撩、被看穿 | 0 |
 | `ayu-meme` | 带字梗图：自嘲、整活、锐评 | 1 |
+
+### 形象锚定句
+
+每个 `ayu-*` 分类的描述末尾都追加同一句外貌锚点，否则视觉模型不知道「阿鱼」是谁，
+既不会选这些分类，也可能把别的角色误填进来：
+
+> 判定同一角色的依据是发色与形体，不是服装：Q版深蓝渐变长发少女，头顶呆毛、
+> 头侧鲸鱼鳍状耳、身后鲸鱼尾、蓝色大眼；换装或换画风仍算她。
+
+- 强调**不看服装**，因为换装/换画风是常态，按女仆装判断会漏。
+- 改这句要同步改全部 5 个分类，`memes_data.json` 与 `manifest.json` 两处都改。
+- `ayu-hello` 里的 `ayu_hello_01.jpg` 是形象基准图（840×840）。**图片不入库**
+  （角色立绘版权不明，且属运行时数据），重建时手动放回该目录即可。
 
 分类描述写在 `ayu-001/memes_data.json` 与 `manifest.json` 的 `categories` 里，**两处要一致**。
 描述是给模型看的「什么时候用」，不是给用户看的说明。
@@ -49,7 +63,8 @@ import json
 from pathlib import Path
 
 pack = Path("data/plugin_data/meme_manager/packs/ayu-001")
-cats = {"ayu-selfie": "...", "ayu-cute": "...", "ayu-shy": "...", "ayu-meme": "..."}
+cats = {"ayu-hello": "...", "ayu-selfie": "...", "ayu-cute": "...",
+        "ayu-shy": "...", "ayu-meme": "..."}   # 每条的末尾都追加形象锚定句
 for c in cats:
     (pack / "memes" / c).mkdir(parents=True, exist_ok=True)
 (pack / "memes_data.json").write_text(json.dumps(cats, ensure_ascii=False, indent=2), encoding="utf-8")
