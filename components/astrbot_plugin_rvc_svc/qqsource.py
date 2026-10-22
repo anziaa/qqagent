@@ -3,7 +3,7 @@
 为什么不用插件自带的网易云链路：
 `wyy.xhily.com`、`163api.qijieya.cn`、`api.vkeys.cn`、`biliplayer` 这几个公共
 下载源已经全部失效（404 / 502 / 空 data），RVC 后端拿不到音频就没法唱。
-而 QQ 音乐会员凭据链路是通的（`D:/AstrBot/tools/qqmusic_login.py` 扫码生成，
+而 QQ 音乐会员凭据链路是通的（`scripts/tools/qqmusic_login.py` 扫码生成，
 保存在 `<AstrBot>/data/qqmusic_cred.json`），所以这里直接复用。
 
 CDN 主机选择、DoH 绕 fake-ip 的做法与 `astrbot_plugin_music/core/net.py` 一致：

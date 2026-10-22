@@ -60,3 +60,14 @@ desktop.ini
 
 # ---------- 凭据（绝不入库）----------
 .ghconfig/
+
+# ---------- 实际配置：含 QQ 号与本机路径，只提交 *.example.json ----------
+config/*.json
+!config/*.example.json
+
+# ---------- 实际人格：含私人对话，只提交示例 ----------
+config/personas/*.md
+!config/personas/example.md
+
+# ---------- 音色参考音频：属于个人生物特征 ----------
+config/ref/*.wav

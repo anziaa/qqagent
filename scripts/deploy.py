@@ -12,8 +12,14 @@
     python scripts/deploy.py            同步全部
     python scripts/deploy.py plugin     只同步插件
     python scripts/deploy.py --check    只检查差异，不写入
+
+三个运行位置默认按下面 DEPLOY_DEFAULTS 走，也可以用环境变量覆盖：
+    ASTRBOT_HOME     AstrBot 根目录（默认 D:\\AstrBot）
+    RVCSVC_HOME      翻唱后端目录（默认 D:\\RVCSVC-API\\RVCSVC-API）
+    COSYVOICE_HOME   CosyVoice2 目录（默认 D:\\WorkBuddy\\QQAgent\\cosyvoice2）
 """
 
+import os
 import sys
 from pathlib import Path, PurePath
 
@@ -25,48 +31,52 @@ for _s in (sys.stdout, sys.stderr):
 
 ROOT = Path(__file__).resolve().parents[1]
 
+ASTRBOT_HOME = Path(os.environ.get("ASTRBOT_HOME", r"D:\AstrBot"))
+RVCSVC_HOME = Path(os.environ.get("RVCSVC_HOME", r"D:\RVCSVC-API\RVCSVC-API"))
+COSYVOICE_HOME = Path(os.environ.get("COSYVOICE_HOME", r"D:\WorkBuddy\QQAgent\cosyvoice2"))
+
 # (短名, 仓库内目录, 运行目录, 要同步的文件模式)
 SPEC = [
     (
         "plugin",
         "components/astrbot_plugin_rvc_svc",
-        r"D:\AstrBot\data\plugins\astrbot_plugin_rvc_svc",
+        ASTRBOT_HOME / "data" / "plugins" / "astrbot_plugin_rvc_svc",
         ["*.py", "*.json", "*.yaml", "*.md", "*.txt", "LICENSE"],
     ),
     (
         "relation",
         "components/astrbot_plugin_relation",
-        r"D:\AstrBot\data\plugins\astrbot_plugin_relation",
+        ASTRBOT_HOME / "data" / "plugins" / "astrbot_plugin_relation",
         ["*.py", "*.json", "*.yaml", "*.txt"],
     ),
     (
         "self_profile",
         "components/astrbot_plugin_self_profile",
-        r"D:\AstrBot\data\plugins\astrbot_plugin_self_profile",
+        ASTRBOT_HOME / "data" / "plugins" / "astrbot_plugin_self_profile",
         ["*.py", "*.json", "*.yaml", "*.txt"],
     ),
     (
         "rvc_api",
         "components/rvc_api",
-        r"D:\RVCSVC-API\RVCSVC-API",
+        RVCSVC_HOME,
         ["*.py", "*.txt"],
     ),
     (
         "cosyvoice",
         "components/cosyvoice",
-        r"D:\WorkBuddy\QQAgent\cosyvoice2",
+        COSYVOICE_HOME,
         ["*.py", "*.sh"],
     ),
     (
         "scripts",
         "scripts",
-        r"D:\AstrBot",
+        ASTRBOT_HOME,
         ["launcher.py", "*.bat"],
     ),
     (
         "tools",
         "scripts/tools",
-        r"D:\AstrBot\tools",
+        ASTRBOT_HOME / "tools",
         ["*.py"],
     ),
 ]
