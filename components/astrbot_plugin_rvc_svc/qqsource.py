@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import os
 import socket
 import time
 import urllib.request
@@ -35,7 +36,12 @@ except Exception:  # pragma: no cover
     SongFileType = None  # type: ignore[assignment]
     _LIB_OK = False
 
-CRED_PATH = Path(r"D:\AstrBot\data\qqmusic_cred.json")
+# 插件装在 <AstrBot>/data/plugins/<插件名>/ 下，往上两级就是 data/
+# （别写死盘符：这个仓库的 AstrBot 是跟着仓库走的，见 runtime/）
+CRED_PATH = Path(
+    os.environ.get("QQMUSIC_CRED")
+    or Path(__file__).resolve().parents[2] / "qqmusic_cred.json"
+)
 STREAM_BASES = (
     "https://isure.stream.qqmusic.qq.com/",
     "https://dl.stream.qqmusic.qq.com/",

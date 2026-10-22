@@ -42,6 +42,16 @@ def _self_uin(event) -> int:
     return 10000
 
 
+def _astrbot_bin() -> Path:
+    """AstrBot 自带的 bin 目录。
+
+    插件装在 <AstrBot>/data/plugins/<插件名>/ 下，往上三级就是 AstrBot 根。
+    别写死盘符——AstrBot 跟着仓库走（见 runtime/），换机器就换了位置。
+    """
+    home = os.environ.get("ASTRBOT_HOME")
+    return (Path(home) if home else Path(__file__).resolve().parents[3]) / "bin"
+
+
 def _ensure_ffmpeg_on_path() -> None:
     """把 AstrBot 自带的 ffmpeg 目录塞进本进程的 PATH。
 
@@ -52,7 +62,7 @@ def _ensure_ffmpeg_on_path() -> None:
     是别的方式拉起来的（手动跑、重启），语音就会莫名其妙发不出去。
     这里在插件加载时补一刀，跟启动方式彻底解耦。
     """
-    bin_dir = Path(r"D:\AstrBot\bin")
+    bin_dir = _astrbot_bin()
     if not (bin_dir / "ffmpeg.exe").exists():
         return
     cur = os.environ.get("PATH", "")

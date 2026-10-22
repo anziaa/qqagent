@@ -7,6 +7,7 @@ RVC 后端产出的永远是整首（3~5 分钟），而 QQ 单条语音上限 6
 3. 用 ffmpeg 截取并加淡入淡出，输出 96k 单声道 mp3
 """
 
+import os
 import random
 import re
 import shutil
@@ -87,7 +88,10 @@ def find_ffmpeg() -> str | None:
         return imageio_ffmpeg.get_ffmpeg_exe()
     except Exception:
         pass
-    for candidate in (r"D:\AstrBot\bin\ffmpeg.exe",):
+    # AstrBot 自带的 bin（插件装在 <AstrBot>/data/plugins/<名>/ 下，往上三级是根）
+    home = os.environ.get("ASTRBOT_HOME")
+    abin = Path(home) if home else Path(__file__).resolve().parents[3]
+    for candidate in (str(abin / "bin" / "ffmpeg.exe"),):
         if Path(candidate).exists():
             return candidate
     return None

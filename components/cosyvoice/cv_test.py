@@ -11,7 +11,21 @@ import sys
 import time
 from pathlib import Path
 
-ROOT = Path(r"D:/WorkBuddy/QQAgent/cosyvoice2")
+def _root() -> Path:
+    """CosyVoice2 运行目录：环境变量 > 自己所在位置。
+
+    两个落脚点：仓库 components/cosyvoice/、部署后 cosyvoice2/。
+    """
+    env = os.environ.get("COSYVOICE_HOME")
+    if env:
+        return Path(env)
+    here = Path(__file__).resolve()
+    if (here.parent / "CosyVoice").is_dir():   # 已经在 cosyvoice2/ 里
+        return here.parent
+    return here.parents[2] / "cosyvoice2"
+
+
+ROOT = _root()
 sys.path.insert(0, str(ROOT / "CosyVoice"))
 sys.path.insert(0, str(ROOT / "CosyVoice/third_party/Matcha-TTS"))
 

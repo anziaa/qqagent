@@ -64,6 +64,11 @@ components/*/core/renderer/resources/*.ttf
 # ---------- 插件运行时数据（配置、缓存）----------
 components/*/data/
 
+# ---------- 误生成的 AstrBot 数据目录 ----------
+# scripts/tools 下某些脚本 import 插件模块时会连带初始化 AstrBot，
+# 它按「当前工作目录」建 data/。真的数据在 runtime/astrbot/data/。
+/data/
+
 # ---------- 系统垃圾 ----------
 Thumbs.db
 .DS_Store

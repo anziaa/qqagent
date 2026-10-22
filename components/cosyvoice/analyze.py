@@ -2,14 +2,33 @@
 """对比四份音频：参考素材 / edge→RVC / CosyVoice2 直出 / CosyVoice2→RVC
 指标：时长、f0 均值与动态（半音）、f0 逐帧抖动、音色余弦相似度（campplus）。
 """
+import os
 import sys
+from pathlib import Path
+
 import numpy as np
 import torch
 import torchaudio
 import pyworld as pw
 
-sys.path.insert(0, r"D:/WorkBuddy/QQAgent/cosyvoice2/CosyVoice")
-MODEL = r"D:/WorkBuddy/QQAgent/cosyvoice2/CosyVoice2-0.5B"
+
+def _root() -> Path:
+    """CosyVoice2 运行目录：环境变量 > 自己所在位置。
+
+    两个落脚点：仓库 components/cosyvoice/、部署后 cosyvoice2/。
+    """
+    env = os.environ.get("COSYVOICE_HOME")
+    if env:
+        return Path(env)
+    here = Path(__file__).resolve()
+    if (here.parent / "CosyVoice").is_dir():   # 已经在 cosyvoice2/ 里
+        return here.parent
+    return here.parents[2] / "cosyvoice2"
+
+
+ROOT = _root()
+sys.path.insert(0, str(ROOT / "CosyVoice"))
+MODEL = str(ROOT / "CosyVoice2-0.5B")
 TEXT_CHARS = 24  # 这句实际发音的字数（去掉标点）
 
 
@@ -76,10 +95,10 @@ def energy_stats(x, sr, win=0.05):
 
 def main():
     files = [
-        ("参考素材", r"D:/WorkBuddy/QQAgent/cosyvoice2/ref/prompt_16k.wav"),
-        ("① edge→RVC", r"D:/WorkBuddy/QQAgent/cosyvoice2/out/1_edge_rvc.mp3"),
-        ("② CosyVoice2", r"D:/WorkBuddy/QQAgent/cosyvoice2/out/instruct_0.wav"),
-        ("③ CV2→RVC", r"D:/WorkBuddy/QQAgent/cosyvoice2/out/3_cv2_rvc.mp3"),
+        ("参考素材", str(ROOT / "ref" / "prompt_16k.wav")),
+        ("① edge→RVC", str(ROOT / "out" / "1_edge_rvc.mp3")),
+        ("② CosyVoice2", str(ROOT / "out" / "instruct_0.wav")),
+        ("③ CV2→RVC", str(ROOT / "out" / "3_cv2_rvc.mp3")),
     ]
     spk_emb.sess = init_sess()
     ref_emb = None
