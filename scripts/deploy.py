@@ -35,49 +35,78 @@ ASTRBOT_HOME = Path(os.environ.get("ASTRBOT_HOME", r"D:\AstrBot"))
 RVCSVC_HOME = Path(os.environ.get("RVCSVC_HOME", r"D:\RVCSVC-API\RVCSVC-API"))
 COSYVOICE_HOME = Path(os.environ.get("COSYVOICE_HOME", r"D:\WorkBuddy\QQAgent\cosyvoice2"))
 
-# (短名, 仓库内目录, 运行目录, 要同步的文件模式)
+# (短名, 仓库内目录, 运行目录, 要同步的文件模式, 是否递归子目录)
 SPEC = [
     (
         "plugin",
         "components/astrbot_plugin_rvc_svc",
         ASTRBOT_HOME / "data" / "plugins" / "astrbot_plugin_rvc_svc",
         ["*.py", "*.json", "*.yaml", "*.md", "*.txt", "LICENSE"],
+        False,
     ),
     (
         "relation",
         "components/astrbot_plugin_relation",
         ASTRBOT_HOME / "data" / "plugins" / "astrbot_plugin_relation",
         ["*.py", "*.json", "*.yaml", "*.txt"],
+        False,
     ),
     (
         "self_profile",
         "components/astrbot_plugin_self_profile",
         ASTRBOT_HOME / "data" / "plugins" / "astrbot_plugin_self_profile",
         ["*.py", "*.json", "*.yaml", "*.txt"],
+        False,
+    ),
+    # 下面三个是上游插件，本地魔改过，所以源码也入库
+    (
+        "music",
+        "components/astrbot_plugin_music",
+        ASTRBOT_HOME / "data" / "plugins" / "astrbot_plugin_music",
+        ["*.py", "*.json", "*.yaml", "*.md", "*.txt", "*.html"],
+        True,
+    ),
+    (
+        "qzone",
+        "components/astrbot_plugin_qzone",
+        ASTRBOT_HOME / "data" / "plugins" / "astrbot_plugin_qzone",
+        ["*.py", "*.json", "*.yaml", "*.md", "*.txt", "*.html", "*.css", "*.js"],
+        True,
+    ),
+    (
+        "favourpro",
+        "components/astrbot_plugin_favourpro",
+        ASTRBOT_HOME / "data" / "plugins" / "astrbot_plugin_favourpro",
+        ["*.py", "*.json", "*.yaml", "*.md", "*.txt"],
+        True,
     ),
     (
         "rvc_api",
         "components/rvc_api",
         RVCSVC_HOME,
         ["*.py", "*.txt"],
+        False,
     ),
     (
         "cosyvoice",
         "components/cosyvoice",
         COSYVOICE_HOME,
         ["*.py", "*.sh"],
+        False,
     ),
     (
         "scripts",
         "scripts",
         ASTRBOT_HOME,
         ["launcher.py", "*.bat"],
+        False,
     ),
     (
         "tools",
         "scripts/tools",
         ASTRBOT_HOME / "tools",
         ["*.py"],
+        False,
     ),
 ]
 
@@ -85,18 +114,35 @@ RESTART_HINT = {
     "plugin": "重启 AstrBot（插件热重载有时不干净）",
     "relation": "重启 AstrBot",
     "self_profile": "重启 AstrBot",
+    "music": "重启 AstrBot",
+    "qzone": "重启 AstrBot",
+    "favourpro": "重启 AstrBot",
     "rvc_api": "重启 7860 RVC 转换 API",
     "cosyvoice": "重启 7870 CosyVoice2",
     "scripts": "重新执行 一键启动服务.bat",
     "tools": "不用重启，脚本按需手动跑",
 }
 
+# 这些路径不参与同步：运行时数据、缓存
+SKIP_PARTS = {"__pycache__", "data", "output", "temp", "logs", ".git"}
 
-def collect(src_dir: Path, patterns: list[str]) -> list[PurePath]:
-    """只取顶层文件，按模式匹配，不递归（源码目录本来就是平的）。"""
+
+def collect(src_dir: Path, patterns: list[str], recursive: bool = False) -> list[PurePath]:
+    """按模式收集文件，返回相对 src_dir 的路径。
+
+    recursive=False 只取顶层（多数组件源码本来就是平的）；
+    True 用于 music / qzone / favourpro 这种带 core/ pages/ 子目录的插件。
+    """
     files = []
+    walker = src_dir.rglob if recursive else src_dir.glob
     for pat in patterns:
-        files.extend(p for p in src_dir.glob(pat) if p.is_file())
+        for p in walker(pat):
+            if not p.is_file():
+                continue
+            rel = p.relative_to(src_dir)
+            if SKIP_PARTS & set(rel.parts) or p.suffix == ".pyc":
+                continue
+            files.append(rel)
     return sorted(set(files))
 
 
@@ -118,7 +164,7 @@ def main() -> int:
     drift = []  # 运行位置比仓库还新，可能是直接在运行目录改过
     need_restart = []
 
-    for name, src_rel, dst_abs, patterns in targets:
+    for name, src_rel, dst_abs, patterns, recursive in targets:
         src_dir = ROOT / src_rel
         dst_dir = Path(dst_abs)
         if not src_dir.is_dir():
@@ -129,23 +175,26 @@ def main() -> int:
             continue
 
         new = changed = same = 0
-        for src in collect(src_dir, patterns):
-            dst = dst_dir / src.name
+        for rel in collect(src_dir, patterns, recursive):
+            src = src_dir / rel
+            dst = dst_dir / rel
             if not dst.exists():
                 new += 1
                 if not check_only:
+                    dst.parent.mkdir(parents=True, exist_ok=True)
                     dst.write_bytes(src.read_bytes())
-                print(f"  + {src.name}")
+                print(f"  + {rel}")
                 continue
             if src.read_bytes() == dst.read_bytes():
                 same += 1
                 continue
             changed += 1
             if dst.stat().st_mtime > src.stat().st_mtime:
-                drift.append(f"{name}/{src.name}")
+                drift.append(f"{name}/{rel}")
             if not check_only:
+                dst.parent.mkdir(parents=True, exist_ok=True)
                 dst.write_bytes(src.read_bytes())
-            print(f"  ~ {src.name}")
+            print(f"  ~ {rel}")
 
         total_new += new
         total_changed += changed

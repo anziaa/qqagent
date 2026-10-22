@@ -1,0 +1,266 @@
+import traceback
+
+from astrbot.api import logger
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.star import Context, Star
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.utils.session_waiter import (
+    SessionController,
+    session_waiter,
+)
+
+from .core.config import PluginConfig
+from .core.downloader import Downloader
+from .core.lyrics_renderer import LyricsRenderer
+from .core.platform import BaseMusicPlayer
+from .core.sender import MusicSender
+from .core.song_renderer import CardRenderer
+from .core.utils import parse_user_input
+
+
+class MusicPlugin(Star):
+    def __init__(self, context: Context, config: AstrBotConfig):
+        super().__init__(context)
+        self.context = context
+        self.cfg = PluginConfig(config, context)
+        self.lyrics_renderer = LyricsRenderer(self.cfg)
+        self.song_renderer = CardRenderer(self.cfg)
+        self.downloader = Downloader(self.cfg)
+        self.sender = MusicSender(
+            self.cfg,
+            self.context,
+            self.lyrics_renderer,
+            self.downloader,
+            self.song_renderer,
+        )
+        self.players: list[BaseMusicPlayer] = []
+        self.keywords: list[str] = []
+
+    async def initialize(self):
+        self._register_player()
+        self._maybe_clear_song_cache()
+
+    def _maybe_clear_song_cache(self):
+        """配置里要求启动时清空歌曲缓存就清一次。
+
+        这个开关（clear_cache）原来只在配置类里声明了字段，从来没有代码读它，
+        等于配置没生效，顺手补上。
+        """
+        if not getattr(self.cfg, "clear_cache", False):
+            return
+        removed = 0
+        try:
+            for f in self.cfg.songs_dir.glob("*.mp3"):
+                if not f.is_file():
+                    continue
+                try:
+                    f.unlink()
+                    removed += 1
+                except OSError:
+                    pass
+            logger.info(f"[歌曲缓存] 已按配置清空，删除 {removed} 个文件")
+        except Exception as e:
+            logger.warning(f"[歌曲缓存] 清空失败：{e}")
+
+    async def terminate(self):
+        await self.sender.close()
+        await self.downloader.close()
+        for parser in self.players:
+            await parser.close()
+
+    def get_player(
+        self, name: str | None = None, word: str | None = None, default: bool = False
+    ) -> BaseMusicPlayer | None:
+        if default:
+            word = self.cfg.default_player_name
+            # 允许直接填音源显示名（如「QQ音乐(会员)」），比记关键词更直观
+            word_display = word.strip().lower()
+            for player in self.players:
+                if player.platform.display_name.lower() == word_display:
+                    return player
+        for player in self.players:
+            if name:
+                name_ = name.strip().lower()
+                p = player.platform
+                if p.display_name.lower() == name_ or p.name.lower() == name_:
+                    return player
+            elif word:
+                word_ = word.strip().lower()
+                for keyword in player.platform.keywords:
+                    if keyword.lower() in word_:
+                        return player
+
+    def _register_player(self):
+        """注册音乐播放器"""
+        all_subclass = BaseMusicPlayer.get_all_subclass()
+        for _cls in all_subclass:
+            player = _cls(self.cfg)
+            self.players.append(player)
+            self.keywords.extend(player.platform.keywords)
+        logger.debug(f"已注册触发词：{self.keywords}")
+
+    @filter.command(
+        "点歌",
+        alias={
+            "网易点歌",
+            "网易nj",
+            "QQ点歌",
+            "酷狗点歌",
+            "酷我点歌",
+            "百度点歌",
+            "咪咕点歌",
+            "荔枝点歌",
+            "蜻蜓点歌",
+            "喜马拉雅",
+            "5sing原创",
+            "5sing翻唱",
+            "全民K歌",
+        },
+    )
+    async def search_song(self, event: AstrMessageEvent):
+        """点歌、网易点歌、网易nj、QQ点歌、酷狗点歌、酷我点歌、百度点歌、咪咕点歌、荔枝点歌、蜻蜓点歌、喜马拉雅、5sing原创、5sing翻唱、全民K歌 <搜索词>"""
+        # 此函数仅用于注册显示命令
+        pass
+
+    @filter.event_message_type(filter.EventMessageType.ALL)
+    async def on_search_song(self, event: AstrMessageEvent):
+        """监听点歌命令： 点歌、网易点歌、网易nj、QQ点歌、酷狗点歌、酷我点歌、百度点歌、咪咕点歌、荔枝点歌、蜻蜓点歌、喜马拉雅、5sing原创、5sing翻唱、全民K歌"""
+        # 解析参数
+        if not event.is_at_or_wake_command:
+            return
+        cmd, _, arg = event.message_str.partition(" ")
+        if not arg:
+            return
+        player = self.get_player(word=cmd)
+        if "点歌" == cmd:
+            player = self.get_player(default=True)
+        if not player:
+            return
+        args = arg.split()
+        index: int = int(args[-1]) if args[-1].isdigit() else 0
+        song_name = arg.removesuffix(str(index))
+        if not song_name:
+            yield event.plain_result("未指定歌名")
+            return
+        # 搜索歌曲
+        logger.debug(f"正在通过{player.platform.display_name}搜索歌曲：{song_name}")
+        songs = await player.fetch_songs(
+            keyword=song_name, limit=self.cfg.real_song_limit, extra=cmd
+        )
+        if not songs:
+            yield event.plain_result(f"搜索【{song_name}】无结果")
+            return
+
+        # 单曲模式
+        if len(songs) == 1:
+            index = 1
+
+        # 输入了序号，直接发送歌曲
+        if index and 0 <= index <= len(songs):
+            selected_song = songs[int(index) - 1]
+            await self.sender.send_song(event, player, selected_song)
+            event.stop_event()
+            return
+
+        # 未提输入序号，等待用户选择歌曲
+        selection_mode = await self.sender.send_song_selection(
+            event=event, songs=songs, player=player
+        )
+
+        if selection_mode == "button":
+            event.stop_event()
+            return
+        if selection_mode not in {"image", "text"}:
+            self.sender.clear_selection_context(event)
+            event.stop_event()
+            return
+
+        @session_waiter(timeout=self.cfg.timeout)
+        async def empty_mention_waiter(
+            controller: SessionController, event: AstrMessageEvent
+        ):
+            arg = event.message_str.strip()
+            arg_lower = arg.lower()
+            for kw in self.keywords:
+                if kw in arg_lower:
+                    controller.stop()
+                    return
+            # 解析输入格式
+            index, modes, error = parse_user_input(arg)
+            if error:
+                await event.send(event.plain_result(error))
+                return
+            if index == 0:
+                return
+            if index < 1 or index > len(songs):
+                controller.stop()
+                return
+            selected_song = songs[index - 1]
+            controller.stop()
+            await self.sender.send_song(event, player, selected_song, modes=modes)
+
+        try:
+            await empty_mention_waiter(event)
+        except TimeoutError as _:
+            self.sender.clear_selection_context(event)
+            yield event.plain_result("点歌超时！")
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            logger.error("点歌发生错误" + str(e))
+
+        event.stop_event()
+
+    @filter.command("查歌词", alias={"查看歌词"})
+    async def query_lyrics(self, event: AstrMessageEvent, song_name: str):
+        """查歌词 <搜索词>"""
+        player = self.get_player(default=True)
+        if not player:
+            yield event.plain_result("无可用播放器")
+            return
+        songs = await player.fetch_songs(keyword=song_name, limit=1)
+        if not songs:
+            yield event.plain_result("没找到相关歌曲")
+            return
+        await self.sender.send_lyrics(event, player, songs[0])
+
+    @filter.llm_tool()
+    async def query_lyrics_by_name(self, event: AstrMessageEvent, song_name: str):
+        """当用户想查看歌词时，根据歌名（可含歌手）搜索并发送歌词图片。
+
+        Args:
+            song_name(string): 歌曲名称或包含歌手的关键词
+        """
+        player = self.get_player(default=True)
+        if not player:
+            return "无可用播放器"
+        songs = await player.fetch_songs(keyword=song_name, limit=1)
+        if not songs:
+            return "没找到相关歌曲"
+        sent = await self.sender.send_lyrics(event, player, songs[0])
+        if not sent:
+            return "歌词获取或发送失败"
+
+    @filter.llm_tool()
+    async def play_song_by_name(
+        self, event: AstrMessageEvent, song_name: str, platform: str = ""
+    ):
+        """当用户想听歌时，根据歌名（可含歌手）搜索并播放音乐。
+
+        Args:
+            song_name(string): 歌曲名称或包含歌手的关键词
+            platform(string): 点歌平台，默认可不填，使用默认播放器。可填写（严格匹配）：网易点歌、网易nj、QQ点歌、酷狗点歌、酷我点歌、百度点歌、咪咕点歌、荔枝点歌、蜻蜓点歌、喜马拉雅、5sing原创、5sing翻唱、全民K歌。
+        """
+
+        player = (
+            self.get_player(name=platform)
+            if platform
+            else self.get_player(default=True)
+        )
+        if not player:
+            return f"无可用播放器：{platform}" if platform else "无可用播放器"
+        songs = await player.fetch_songs(
+            keyword=song_name, limit=1, extra=platform or None
+        )
+        if not songs:
+            return "没找到相关歌曲"
+        await self.sender.send_song(event, player, songs[0])

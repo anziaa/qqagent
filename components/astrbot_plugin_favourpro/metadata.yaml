@@ -1,0 +1,6 @@
+name: favorpro # 这是你的插件的唯一识别名。
+desc: 这是一个与现有好感度系统完全不同的插件。它不再是一个简单的数值计算工具，而是旨在为 AI 模拟一个多维度、自主且保密的内心世界。AI 会根据与用户的互动，真实地改变其内在的“好感度”、“态度”和“关系”，并通过回应风格的变化自然地流露出来。
+help:  # 插件的帮助信息
+version: v1.0.4 # 插件的版本号
+author: 天各一方
+repo: https://github.com/Catfish872/astrbot_plugin_favourpro # 插件的仓库地址
