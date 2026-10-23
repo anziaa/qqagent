@@ -919,6 +919,15 @@ class MemeSender(Star, WebAPIMixin, CommandMixin, EventHandlerMixin):
         req.system_prompt = self._strip_meme_prompt(
             req.system_prompt
         ) + self._wrap_meme_prompt(sys_prompt_add)
+        logger.info(
+            "[meme_manager] 注入自检：system_prompt %d 字符 | 分类 %d 个 | "
+            "head %s | 含标记说明 %s | 含频率引导 %s",
+            len(req.system_prompt),
+            len(category_mapping),
+            "有" if self.prompt_head else "空",
+            "是" if "&&" in req.system_prompt else "否",
+            "是" if "表情使用频率" in req.system_prompt else "否",
+        )
 
     def _reload_personas(self):
         pack_context = self._resolve_runtime_pack_context()

@@ -1122,6 +1122,24 @@ class EventHandlerMixin:
             if isinstance(context_mapping, dict)
             else runtime_category_mapping(self.category_mapping)
         )
+        # 兜底选择只暴露真正有图的分类：空的分类目录一旦被选中，后面无图可发，
+        # 用户侧表现为“选了分类却没有表情”。与注入提示词时的过滤保持一致。
+        memes_dirs = [
+            Path(directory) / "memes"
+            for directory in pack_context.get("pack_dirs", {}).values()
+        ] or [Path(pack_context.get("memes_dir") or "")]
+        active_category_mapping = {
+            key: description
+            for key, description in active_category_mapping.items()
+            if any(
+                (memes_dir / key).is_dir()
+                and any(
+                    image.is_file() and image.suffix.lower() in IMAGE_EXTENSIONS
+                    for image in (memes_dir / key).iterdir()
+                )
+                for memes_dir in memes_dirs
+            )
+        }
 
         found_emotions: list[str] = []
         valid_emoticons = set(active_category_mapping.keys())
