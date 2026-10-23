@@ -35,6 +35,9 @@ SELF_SECTION = "状态"
 _JOURNAL_TIME = re.compile(r"^\d{1,2}:\d{2}\s*·\s*")
 _JOURNAL_LINK = re.compile(r"^\[\[[^\]]*\]\]\s*[：:]?\s*")
 
+# 时间线条目上工具加的前缀，检索去重时剥掉才是内容本身
+_LOG_PREFIX = re.compile(r"^(?:记了一笔|主人手动记)[：:]\s*")
+
 
 def _safe(name: str, fallback: str = "note", limit: int = 60) -> str:
     out = _UNSAFE.sub("_", (name or "").strip()).strip("._")
@@ -162,6 +165,31 @@ def bullets(text: str) -> list[str]:
 def strip_date(item: str) -> str:
     """把 `2026-10-20 · 内容` 里的日期前缀去掉，只给提示词看内容。"""
     return re.sub(r"^\d{4}-\d{2}-\d{2}\s*[·:]\s*", "", item or "").strip()
+
+
+def timeline_key(item: str) -> str:
+    """时间线条目的内容本身：去掉日期前缀和「记了一笔：」这类工具前缀。"""
+    return _LOG_PREFIX.sub("", strip_date(item)).strip()
+
+
+def timeline_extras(items: list[str], facts: list[str]) -> list[str]:
+    """`## 时间线` 里真正带了新信息的那些条目。
+
+    时间线的本职是「什么时候发生过什么」的人读流水。工具写它的时候
+    （`remember_about_person` 和 `/记住`）同时也写了一条事实，两条内容一样，
+    直接并进检索只会让同一句话占两个名额，所以按内容去重，
+    只留事实里没有的——比如你手写在笔记里的条目。
+    """
+    seen = [strip_date(x) for x in facts if strip_date(x)]
+    out: list[str] = []
+    for item in items:
+        key = timeline_key(item)
+        if not key:
+            continue
+        if any(key in s or s in key for s in seen):
+            continue
+        out.append(item)
+    return out
 
 
 class Vault:
@@ -476,6 +504,7 @@ class Vault:
 
         if kind == "people":
             entries = bullets(sections.get(FACT_SECTION, ""))
+            entries += timeline_extras(bullets(sections.get(TIMELINE_SECTION, "")), entries)
         else:
             entries = []
             for body_text in sections.values():
