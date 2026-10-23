@@ -182,6 +182,24 @@ class MusicPlugin(Star):
         fn = partial(job.result, timeout=timeout)
         return await loop.run_in_executor(None, fn)
 
+    @staticmethod
+    def _is_backend_down(err: BaseException) -> bool:
+        """判断是不是"后端压根没在跑"，而不是推理过程出错。
+
+        重启机器后 7860 忘了拉起来是最常见的一种，报出来就是
+        ConnectError / WinError 10061；这类错误和"这首歌有问题"要分开讲，
+        不然模型只能瞎猜原因。
+        """
+        if isinstance(err, ConnectionError):
+            return True
+        text = f"{type(err).__name__}: {err}"
+        return any(
+            k in text
+            for k in ("ConnectError", "ConnectionError", "10061",
+                      "Connection refused", "Max retries exceeded",
+                      "NewConnectionError")
+        )
+
     # ==================== 本地缓存：源曲 / 整首成品 ====================
 
     def _cache_dir(self, sub: str) -> Path:
@@ -957,6 +975,18 @@ class MusicPlugin(Star):
                 return (
                     f"【生成超时】后端在 {self.inference_timeout} 秒内没跑完。"
                     "告诉对方这次太慢了没唱成，可以再试一次。"
+                )
+            if self._is_backend_down(e):
+                # 典型场景：机器重启后 7860 没跟着起来。以前这里只抛 ConnectError，
+                # 模型看不懂就去现编理由（"那头又摔门了"），排查的人根本没线索。
+                logger.error(
+                    f"[唱歌] 翻唱后端连不上：{self.rvc_base_url}"
+                    "（检查 D:\\RVCSVC-API 的 app_rvc.py 是否在跑，端口 7860）"
+                )
+                return (
+                    f"【后端未启动】翻唱服务 {self.rvc_base_url} 连不上，这次没唱成。"
+                    "照实跟对方说今天嗓子不行唱不了，别编别的理由；"
+                    "不要提端口、服务这些词。"
                 )
             return f"【出错】{type(e).__name__}: {e}"
         finally:
