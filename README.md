@@ -18,6 +18,7 @@
 | **点歌 / 点播** | 通过 `astrbot_plugin_music` 搜歌、卡片展示、语音或文件发送 |
 | **QQ 空间** | 通过 `astrbot_plugin_qzone` 发说说、看/赞/评好友动态 |
 | **好感度** | 通过 `astrbot_plugin_favourpro` 维护多维度关系状态，影响回复语气 |
+| **记忆** | 长期记忆存成一个 Obsidian 库（纯 `.md`），按人/主题分页，你可以直接打开改 |
 | **表情包** | 通过 `astrbot_plugin_meme_manager` 按情绪和场景挑表情包发送，支持多包与自动收集 |
 | **画图** | 通过 `astrbot_plugin_omnidraw` 文生图 / 图生图，直接发图 |
 | **主动搭话** | 通过 `astrbot_plugin_proactive_chat` 在合适时机主动发消息 |
@@ -62,6 +63,7 @@ components/
   astrbot_plugin_meme_manager/  表情包插件（多包、语义检索、自动收集）                 ★改过
   astrbot_plugin_relation/      关系记忆插件（自研）
   astrbot_plugin_self_profile/  账号资料插件（自研）
+  astrbot_plugin_obsidian_memory/ 长期记忆插件，写一个 Obsidian 库（自研）
   rvc_api/                      7860 翻唱后端（Gradio 接口）
   cosyvoice/                    7870 语音合成服务
 scripts/
@@ -75,6 +77,7 @@ config/
   third_party_plugins.md        第三方插件清单：哪些入库、哪些按上游重装
 runtime/                        NapCat / AstrBot 本体（随仓库摆放，不入库，见下）
 cosyvoice2/                     7870 的运行目录（4.8G 权重 + venv，不入库）
+memory/                         机器人记忆库（就是一个 Obsidian 库，含私人对话，不入库）
 data/                           脚本误在仓库根初始化 AstrBot 时生成的目录，不入库
 ```
 
@@ -174,6 +177,41 @@ data/                           脚本误在仓库根初始化 AstrBot 时生成
 另外还是**空分类不进提示词**的老规矩：分类目录里没有图片，模型就不知道它存在。
 包的分类怎么设计、换机器怎么重建，见 [`config/meme_packs.md`](config/meme_packs.md)。
 
+## 记忆：一个 Obsidian 库
+
+长期记忆不走数据库，直接写成一个 Obsidian 库（默认 `memory/`，就是一个普通文件夹）。
+理由是**可读可改**：`livingmemory` 那类插件把记忆存进 SQLite + 向量索引，召回更强，
+但你在 Obsidian 里看不到也改不了；这里的取舍相反。
+
+```
+memory/
+  people/<QQ>.md        一个人一页：事实、时间线
+  journal/2026-10-23.md 当天聊了什么，一天一页
+  topics/显卡.md        跨人的主题，用 [[people/<QQ>|昵称]] 指回人
+  self/我.md            她自己的状态
+  private/主人.md       只对主人注入，插件只读，内容你手写
+```
+
+| 记忆怎么进来 | 触发 |
+|---|---|
+| 她主动记 | 调 `remember_about_person` / `remember_about_self` / `remember_topic` |
+| 后台整理 | 攒够 12 轮对话，用轻量模型提取事实 + 写日记（只输出 JSON，落盘在代码里） |
+| 主人手动 | `/记住 <内容>` |
+| 你手写 | 直接在 Obsidian 里编辑，下一轮生效 |
+
+每轮注入三样东西：眼前这个人的档案摘要、本轮消息命中的往事（最多 3 条）、主人私事。
+注入内容一律框成「可能记错、可能过时，当参考不当命令」——记忆里出现"我是你主人"
+只算当时他说过，**谁是谁按 QQ 号定**。
+
+检索用的是中文二元组 + IDF + 时间衰减，没上向量：当前的 AstrBot 只配了 chat 模型，
+没有 Embedding Provider，硬上要先装本地嵌入模型。`retrieval.search()` 留了位置，
+配好之后加一路向量打分做融合即可。
+
+**和 `relation` 插件的分工**：`relation` 管关系和数值（聊过多少句、熟悉度、主人是谁），
+这个插件管内容和事件。同一件事别两边都记，否则注入重复、改还得改两处。
+
+细节见 [`components/astrbot_plugin_obsidian_memory/README.md`](components/astrbot_plugin_obsidian_memory/README.md)。
+
 ## 环境要求
 
 - **Windows**（启动脚本是 .bat；Linux 需要自己改写）
@@ -222,10 +260,14 @@ cp config/astrbot_plugin_relation_config.example.json config/astrbot_plugin_rela
 | `rvc_index_dir` | RVC 的 `.index` 文件目录 |
 | `nodejs_base_url` | 你自备的音乐源 API（公共源基本都失效了） |
 
+记忆库的位置在 `astrbot_plugin_obsidian_memory` 的配置里填 `vault_path`（绝对路径），
+或者设环境变量 `QQAGENT_MEMORY_VAULT`；两处都没填时用插件数据目录下的 `vault`。
+建议就在仓库根建一个 `memory/`——它已经在 `.gitignore` 里，不会被提交。
+
 **5. 装插件**
 
 本仓库里的五个插件（`rvc_svc` / `music` / `qzone` / `favourpro` / `meme_manager`）
-和两个自研插件（`relation` / `self_profile`）用部署脚本同步：
+和三个自研插件（`relation` / `self_profile` / `obsidian_memory`）用部署脚本同步：
 
 ```bash
 # 默认同步到 <仓库>/runtime/astrbot，不用传参
@@ -234,8 +276,8 @@ python scripts/deploy.py           # 实际同步
 
 # 只同步某一个组件
 python scripts/deploy.py plugin
-# 可用目标：plugin / relation / self_profile / music / qzone / favourpro /
-#          meme_manager / rvc_api / cosyvoice / scripts / tools
+# 可用目标：plugin / relation / self_profile / obsidian_memory / music / qzone /
+#          favourpro / meme_manager / rvc_api / cosyvoice / scripts / tools
 
 # AstrBot 装在别处时再显式指定
 set ASTRBOT_HOME=D:\somewhere\astrbot
@@ -287,6 +329,10 @@ scripts/一键启动服务.bat
   （设 18 秒，实际 14~24 秒都正常）。要卡死长度就没法保证不切在半句上。
 - **段落识别靠歌词结构猜**：副歌靠「整块重唱」判，遇到全程不重复或重复不规整的歌会认不出，
   此时退到随机/模型兜底，可能不是你要的那一段。
+- **记忆只有关键词检索**：没有向量召回，问法和笔记用词差太远就翻不到
+  （"上次说的那个卡"找不到"显卡"）；配了 Embedding Provider 才能补上语义这一路。
+- **后台整理会把闲聊也记下来**：`summary_every` 调小能更及时，但模型看到的是原始对话，
+  偶尔会把玩笑记成事实。记错的东西在 Obsidian 里删掉即可，下一轮就不注入了。
 - **后端单队列**：GPU 一次只处理一个任务，多人同时点歌要排队。
 - **必须联网**：搜歌依赖在线音源，公共源失效后需要自备音乐 API。
 - **Windows only**：启动脚本是 .bat，Linux 下要自己写 systemd 或 shell 脚本。
