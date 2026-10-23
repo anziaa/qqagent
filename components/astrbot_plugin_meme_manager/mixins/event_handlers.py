@@ -44,7 +44,11 @@ from ..backend.semantic.query import (
     search_memes_multi_pack,
     validate_selected_id,
 )
-from ..backend.semantic.storage import invalidate_semantic_metadata
+from ..backend.semantic.storage import (
+    file_sha256,
+    invalidate_semantic_metadata,
+    load_metadata,
+)
 from ..config import PLUGIN_DATA_DIR
 from ..utils import probability_hit
 
@@ -53,6 +57,8 @@ TRIGGER_SCOPE_CHAT_AND_PLUGIN = "chat_and_plugin_llm"
 LLM_REQUEST_ORIGIN_EXTRA_KEY = "meme_manager_llm_request_origin"
 LLM_REQUEST_ORIGIN_CHAT = "chat"
 LLM_REQUEST_ORIGIN_PLUGIN = "plugin"
+# 第二轮选图是附加质量步骤，超时后必须让随机兜底继续，不能拖住整条回复。
+MEME_PICK_TIMEOUT_SECONDS = 10.0
 
 
 def normalize_trigger_scope(value: Any) -> str:
@@ -611,6 +617,191 @@ class EventHandlerMixin:
                 )
         return images
 
+    def _meme_caption_index(self, event: AstrMessageEvent) -> dict[str, dict[str, str]]:
+        """Index image semantics of every bound pack by content hash.
+
+        Args:
+            event: Event used to resolve the current pack bindings.
+
+        Returns:
+            Content SHA-256 to caption/visible-text mapping, cached per event.
+        """
+        cached = event.get_extra("meme_manager_caption_index")
+        if isinstance(cached, dict):
+            return cached
+        index: dict[str, dict[str, str]] = {}
+        context = self._resolve_runtime_pack_context(event=event)
+        for directory in context.get("pack_dirs", {}).values():
+            try:
+                data = load_metadata(Path(directory))
+            except Exception as exc:  # 语义记录缺失或损坏都不应影响发图
+                logger.debug("[meme_manager] 读取图片语义记录失败: %s", exc)
+                continue
+            records = data.get("images") if isinstance(data, dict) else None
+            if not isinstance(records, dict):
+                continue
+            for record in records.values():
+                if not isinstance(record, dict):
+                    continue
+                digest = str(record.get("content_sha256") or "").strip().lower()
+                if not digest:
+                    continue
+                index[digest] = {
+                    "caption": str(record.get("caption") or "").strip(),
+                    "visible_text": str(record.get("visible_text") or "").strip(),
+                }
+        event.set_extra("meme_manager_caption_index", index)
+        return index
+
+    @staticmethod
+    def _clip_prompt_text(text: str, limit: int = 120) -> str:
+        """Collapse whitespace and clip text before it enters a prompt."""
+        compact = re.sub(r"\s+", " ", str(text or "")).strip()
+        return compact if len(compact) <= limit else compact[:limit] + "…"
+
+    @staticmethod
+    def _plain_components_text(components: Any) -> str:
+        """Join the visible plain text of outgoing components."""
+        return "".join(
+            component.text or ""
+            for component in components or []
+            if isinstance(component, Plain)
+        ).strip()
+
+    def _described_meme_candidates(
+        self, event: AstrMessageEvent, memes: list[Path]
+    ) -> list[tuple[Path, str, str]]:
+        """Keep the images that already have a caption.
+
+        Args:
+            event: Event used to resolve semantic records.
+            memes: Candidate images of one category.
+
+        Returns:
+            (path, caption, visible_text) for every described image.
+        """
+        index = self._meme_caption_index(event)
+        described: list[tuple[Path, str, str]] = []
+        for path in memes:
+            try:
+                digest = file_sha256(path).lower()
+            except OSError:
+                continue
+            record = index.get(digest) or {}
+            caption = str(record.get("caption") or "").strip()
+            if not caption:
+                continue
+            described.append((path, caption, str(record.get("visible_text") or "")))
+        return described
+
+    def _build_meme_pick_prompt(
+        self,
+        event: AstrMessageEvent,
+        candidates: list[tuple[Path, str, str]],
+        reply_text: str,
+    ) -> str:
+        """Build the second-round prompt that picks one image by caption.
+
+        Args:
+            event: Event carrying the triggering user message.
+            candidates: Described images of the already selected category.
+            reply_text: The reply this image will accompany.
+
+        Returns:
+            A short prompt that can only answer with a candidate index.
+        """
+        lines = ["从下面的候选里挑一张最贴合语境的表情包。"]
+        user_text = self._clip_prompt_text(
+            str(getattr(event, "message_str", "") or ""), 100
+        )
+        if user_text:
+            lines.append(f"对方刚才说：{user_text}")
+        clipped_reply = self._clip_prompt_text(reply_text, 100)
+        if clipped_reply:
+            lines.append(f"你要回的这句：{clipped_reply}")
+        lines.append("候选：")
+        for position, (_path, caption, visible_text) in enumerate(candidates, start=1):
+            entry = f"{position}. {self._clip_prompt_text(caption, 110)}"
+            visible = self._clip_prompt_text(visible_text.replace("\n", " / "), 40)
+            if visible:
+                entry += f"〔图上文字：{visible}〕"
+            lines.append(entry)
+        lines.append(
+            f"只输出一个序号（1-{len(candidates)}），不要解释，也不要输出文件名。"
+        )
+        return "\n".join(lines)
+
+    def _match_picked_candidate(
+        self, answer: str, candidates: list[tuple[Path, str, str]]
+    ) -> Path | None:
+        """Map the model answer back to a candidate, tolerating surrounding noise."""
+        text = str(answer or "").strip()
+        if not text:
+            return None
+        match = re.search(r"\d{1,2}", text)
+        if match:
+            position = int(match.group(0))
+            if 1 <= position <= len(candidates):
+                return candidates[position - 1][0]
+        for path, _caption, _visible in candidates:
+            if path.name and path.name in text:
+                return path
+        return None
+
+    async def _pick_meme_file(
+        self,
+        event: AstrMessageEvent,
+        emotion: str,
+        memes: list[Path],
+        reply_text: str = "",
+    ) -> str:
+        """Pick one image of a multi-image category by its caption.
+
+        Args:
+            event: Event carrying reply context and the provider binding.
+            emotion: Category the first round already selected.
+            memes: Images of that category.
+            reply_text: The reply this image will accompany.
+
+        Returns:
+            Path of the chosen image. Every failure mode falls back to a random
+            pick, so the second round can only improve quality, never block a
+            reply that would otherwise have been sent.
+        """
+        if not memes:
+            return ""
+        if len(memes) == 1:
+            return str(memes[0])
+        if not bool(getattr(self, "meme_exact_pick", True)):
+            return str(random.choice(memes))
+
+        candidates = self._described_meme_candidates(event, memes)
+        if len(candidates) < 2:
+            # 少于两张有描述的图时，第二轮没有可用的判据。
+            return str(random.choice(memes))
+
+        prompt = self._build_meme_pick_prompt(event, candidates, reply_text)
+        try:
+            response = await asyncio.wait_for(
+                self._emotion_llm_generate(event, prompt),
+                timeout=MEME_PICK_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:
+            logger.warning("[meme_manager] 第二轮选图调用失败，回退随机：%s", exc)
+            return str(random.choice(memes))
+
+        answer = getattr(response, "completion_text", "") if response else ""
+        picked = self._match_picked_candidate(str(answer or ""), candidates)
+        if picked is None:
+            logger.info(
+                "[meme_manager] 第二轮选图未命中（%s），回退随机：%r",
+                emotion,
+                str(answer or "")[:60],
+            )
+            return str(random.choice(memes))
+        logger.debug("[meme_manager] 第二轮选图：%s -> %s", emotion, picked.name)
+        return str(picked)
+
     async def _build_emotion_images_for_event(
         self,
         event: AstrMessageEvent,
@@ -632,7 +823,7 @@ class EventHandlerMixin:
             if not memes:
                 continue
 
-            meme_file = str(random.choice(memes))
+            meme_file = await self._pick_meme_file(event, emotion, memes)
 
             try:
                 final_meme_file = await asyncio.to_thread(
@@ -1380,7 +1571,12 @@ class EventHandlerMixin:
                         memes = self._get_category_meme_files(event, emotion)
                         if not memes:
                             continue
-                        meme_file = str(random.choice(memes))
+                        meme_file = await self._pick_meme_file(
+                            event,
+                            emotion,
+                            memes,
+                            self._plain_components_text(cleaned_components),
+                        )
 
                         try:
                             # 转换静态图为 GIF（如果配置开启）
@@ -1566,7 +1762,7 @@ class EventHandlerMixin:
                 memes = self._get_category_meme_files(event, emotion)
                 if not memes:
                     continue
-                meme_file = str(random.choice(memes))
+                meme_file = await self._pick_meme_file(event, emotion, memes)
                 final_meme_file = await asyncio.to_thread(
                     self._convert_to_gif, meme_file
                 )

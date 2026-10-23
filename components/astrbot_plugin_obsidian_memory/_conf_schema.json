@@ -8,7 +8,13 @@
   "vault_path": {
     "description": "记忆库目录（Obsidian 库根）",
     "type": "string",
-    "hint": "留空则用环境变量 QQAGENT_MEMORY_VAULT，再没有就用插件数据目录下的 vault。填绝对路径，例如 D:/Code/qqagent/memory",
+    "hint": "留空则用环境变量 QQAGENT_MEMORY_VAULT，再没有就用插件数据目录下的 vault。填绝对路径，例如 D:/Obsidian/MyVault/memory",
+    "default": ""
+  },
+  "buffer_path": {
+    "description": "未整理对话的落盘位置",
+    "type": "string",
+    "hint": "留空则用 插件数据目录/buffer.json。这个文件让插件重启后还记得聊到哪儿，删掉等于把没攒满的那几轮丢掉",
     "default": ""
   },
   "owner_qqs": {
@@ -62,8 +68,8 @@
   "summary_every": {
     "description": "攒多少轮整理一次",
     "type": "int",
-    "hint": "按用户消息数算。12 轮一次大约每次几百 token，太小会把闲聊也记下来",
-    "default": 12
+    "hint": "按用户消息数算。默认 6 轮；调大更省 token 但反馈更慢。没攒满的计数会落盘，重启不丢",
+    "default": 6
   },
   "summary_provider_id": {
     "description": "整理用哪个模型",
@@ -76,5 +82,47 @@
     "type": "int",
     "hint": "超出后丢最早的。60 条约 1.5 KB，提示词里只注入最新的一部分",
     "default": 60
+  },
+  "diary_enable": {
+    "description": "让她自己写日记",
+    "type": "bool",
+    "hint": "和「自动整理」是两条路：整理写的是 ## 记录（第三方摘要，能检索），日记写的是 ## 日记（第一人称，只有她自己）。关掉就不写了，已有的日记不动",
+    "default": true
+  },
+  "diary_inject": {
+    "description": "把最近的日记注入对话",
+    "type": "bool",
+    "hint": "每轮带最近 2 条（截到 70 字），让她自己记得想过什么。关掉后日记就纯粹是给你看的",
+    "default": true
+  },
+  "diary_idle_minutes": {
+    "description": "安静多少分钟后可以考虑写一记",
+    "type": "int",
+    "hint": "断断续续地记就靠这个：安静够久、又攒了新对话，才问她一次。太短会写成聊天流水账",
+    "default": 25
+  },
+  "diary_min_turns": {
+    "description": "至少攒几轮才问一次",
+    "type": "int",
+    "hint": "按用户消息数算。1 轮就问容易写出鸡毛蒜皮",
+    "default": 2
+  },
+  "diary_wrap_hour": {
+    "description": "从几点起可以写当天最后一记",
+    "type": "int",
+    "hint": "0~23。到点后补一次收尾；跨过零点时也会把前一天没收拾的补上。设 0 就只在自然跨天时收尾",
+    "default": 23
+  },
+  "diary_keep": {
+    "description": "一天最多几条日记",
+    "type": "int",
+    "hint": "写满就停写，不删旧的——日记是只增不改的东西。10 条足够，觉得不够再调",
+    "default": 10
+  },
+  "diary_tick_seconds": {
+    "description": "日记循环多久看一次",
+    "type": "int",
+    "hint": "默认 120 秒。这个循环只做判断，不调模型；真正调模型有冷却，不会空烧 token",
+    "default": 120
   }
 }

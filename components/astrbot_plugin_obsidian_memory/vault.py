@@ -28,7 +28,12 @@ _WS = re.compile(r"\s+")
 FACT_SECTION = "事实"
 TIMELINE_SECTION = "时间线"
 JOURNAL_SECTION = "记录"
+DIARY_SECTION = "日记"
 SELF_SECTION = "状态"
+
+# 记录里的一行长这样：`11:07 · [[people/10001|小明]]：聊了…`
+_JOURNAL_TIME = re.compile(r"^\d{1,2}:\d{2}\s*·\s*")
+_JOURNAL_LINK = re.compile(r"^\[\[[^\]]*\]\]\s*[：:]?\s*")
 
 
 def _safe(name: str, fallback: str = "note", limit: int = 60) -> str:
@@ -38,6 +43,50 @@ def _safe(name: str, fallback: str = "note", limit: int = 60) -> str:
 
 def _clean(text: str, limit: int = 120) -> str:
     return _WS.sub(" ", (text or "").replace("\r", " ")).strip()[:limit]
+
+
+def _prose(text: str, limit: int = 300) -> str:
+    """清洗散文（日记用），和 `_clean` 的区别是**保留换行**。
+
+    日记的质感在换行上，用 `_clean` 会把两段压成一行。顺手削掉模型爱加的
+    列表符号和粗体：日记里出现 `- ` 还会被检索当条目收走，那是另一套东西。
+    """
+    out: list[str] = []
+    for raw in (text or "").replace("\r", "").split("\n"):
+        line = raw.strip()
+        if not line:
+            if out and out[-1] != "":
+                out.append("")
+            continue
+        line = re.sub(r"^[-*+]\s+", "", line)
+        line = line.replace("**", "").strip()
+        if line:
+            out.append(line)
+    while out and out[-1] == "":
+        out.pop()
+    return "\n".join(out).strip()[:limit]
+
+
+def diary_blocks(raw: str) -> list[str]:
+    """按 `**HH:MM**` 切日记条目。
+
+    特意不按空行切：一条日记里她自己分段是很正常的
+    （"今天有点累。\n\n但他没催我。"），按空行切会把一条变成两条，
+    读回来就多了一笔根本不存在的记录。时间戳才是真正的分隔符。
+    """
+    text = (raw or "").strip()
+    if not text:
+        return []
+    parts = re.split(r"(?m)^\*\*\d{1,2}:\d{2}\*\*[ \t]*$", text)
+    out: list[str] = []
+    # 第一段可能是不带时间戳的手写内容，也算一条
+    if parts and parts[0].strip():
+        out.append(parts[0].strip())
+    for part in parts[1:]:
+        part = part.strip()
+        if part:
+            out.append(part)
+    return out
 
 
 def _unquote(value: str) -> str:
@@ -274,6 +323,74 @@ class Vault:
         line = f"- {when:%H:%M} · {link}：{text}"
         sections[JOURNAL_SECTION] = (sections.get(JOURNAL_SECTION, "") + "\n" + line).strip("\n")
         atomic_write(path, build_doc(fm, head, sections))
+
+    def journal_lines(self, day: date) -> list[str]:
+        """当天 `## 记录` 里的条目，去掉时间戳和 [[链接]]，喂给日记当事实底稿。"""
+        path = self.journal_file(day)
+        if not path.is_file():
+            return []
+        try:
+            _, body = split_frontmatter(path.read_text(encoding="utf-8"))
+        except OSError:
+            return []
+        _, sections = split_sections(body)
+        out: list[str] = []
+        for item in bullets(sections.get(JOURNAL_SECTION, "")):
+            text = _JOURNAL_LINK.sub("", _JOURNAL_TIME.sub("", item)).strip()
+            if text:
+                out.append(text)
+        return out
+
+    # ==================== 日记（她自己写的） ====================
+
+    def read_diary(self, day: date) -> list[str]:
+        """读某天 `## 日记` 的正文条目，按写入顺序。"""
+        path = self.journal_file(day)
+        if not path.is_file():
+            return []
+        try:
+            _, body = split_frontmatter(path.read_text(encoding="utf-8"))
+        except OSError:
+            return []
+        _, sections = split_sections(body)
+        return diary_blocks(sections.get(DIARY_SECTION, ""))
+
+    def append_diary(self, when: datetime, text: str, keep: int = 12) -> bool:
+        """她自己写的日记：第一人称散文，落在 `## 日记`。
+
+        和 `## 记录` 分开是有意的，两边不是同一种东西：
+
+        - `## 记录` 是整理器写的第三方摘要，一行一条，**参与检索**；
+        - `## 日记` 是她自己的口气，散文、无 `- ` 前缀，所以 `_make_doc`
+          收不到它，不会混进"翻到的往事"。它只在注入时按条取用。
+
+        写满 `keep` 条就**停写**，不删旧的：日记是只增不改的东西，
+        删掉她昨天写的比少写两行严重得多。
+        """
+        text = _prose(text)
+        if not text:
+            return False
+        path = self.journal_file(when.date())
+        fm = {"type": "journal", "date": when.date().isoformat(), "tags": "[日记]"}
+        head, sections = f"# {when.date().isoformat()}", OrderedDict()
+        if path.is_file():
+            fm_old, body = split_frontmatter(path.read_text(encoding="utf-8"))
+            head, sections = split_sections(body)
+            fm.update({k: v for k, v in fm_old.items() if k not in fm})
+            head = head.strip() or f"# {when.date().isoformat()}"
+            if len(diary_blocks(sections.get(DIARY_SECTION, ""))) >= max(1, keep):
+                return False
+        block = f"**{when:%H:%M}**\n{text}"
+        sections[DIARY_SECTION] = (
+            (sections.get(DIARY_SECTION, "") + "\n\n" + block).strip("\n")
+        )
+        # 日记放最前面：打开当天笔记先看到她写的，再看事无巨细的记录
+        ordered: "OrderedDict[str, str]" = OrderedDict()
+        ordered[DIARY_SECTION] = sections.pop(DIARY_SECTION)
+        ordered.update(sections)
+        atomic_write(path, build_doc(fm, head, ordered))
+        return True
+
 
     # ==================== 主题 ====================
 
