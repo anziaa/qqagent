@@ -180,6 +180,20 @@ def collect(src_dir: Path, patterns: list[str], recursive: bool = False) -> list
     return sorted(set(files))
 
 
+def payload(src: Path) -> bytes:
+    """要写到运行位置的字节；.bat/.cmd 统一成 CRLF。
+
+    cmd.exe 按「当前代码页」逐字节读批处理文件：LF 结尾的 UTF-8 文件里，
+    汉字的后一个字节会被当成前一个字的延续，把换行一起吃掉，整行拼错，
+    双击后报一堆「xxx 不是内部或外部命令」。所以 .bat 落盘前必须转成 CRLF，
+    否则仓库里看着正常、运行位置一跑就散架。
+    """
+    data = src.read_bytes()
+    if src.suffix.lower() in (".bat", ".cmd"):
+        data = data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+    return data
+
+
 def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     check_only = "--check" in sys.argv
@@ -197,7 +211,6 @@ def main() -> int:
     total_new = total_changed = total_same = 0
     drift = []  # 运行位置比仓库还新，可能是直接在运行目录改过
     need_restart = []
-
     for name, src_rel, dst_abs, patterns, recursive in targets:
         src_dir = ROOT / src_rel
         dst_dir = Path(dst_abs)
@@ -212,14 +225,15 @@ def main() -> int:
         for rel in collect(src_dir, patterns, recursive):
             src = src_dir / rel
             dst = dst_dir / rel
+            data = payload(src)
             if not dst.exists():
                 new += 1
                 if not check_only:
                     dst.parent.mkdir(parents=True, exist_ok=True)
-                    dst.write_bytes(src.read_bytes())
+                    dst.write_bytes(data)
                 print(f"  + {rel}")
                 continue
-            if src.read_bytes() == dst.read_bytes():
+            if data == dst.read_bytes():
                 same += 1
                 continue
             changed += 1
@@ -227,7 +241,7 @@ def main() -> int:
                 drift.append(f"{name}/{rel}")
             if not check_only:
                 dst.parent.mkdir(parents=True, exist_ok=True)
-                dst.write_bytes(src.read_bytes())
+                dst.write_bytes(data)
             print(f"  ~ {rel}")
 
         total_new += new
