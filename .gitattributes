@@ -2,9 +2,13 @@
 # （Windows 版 git 默认 autocrlf=true 会把源码全转成 CRLF，
 #  导致 deploy.py 的字节比较把所有文件误判成"有改动"）
 #
-# 全部统一 LF，包括 .bat：本机的批处理一直是 LF 且能正常启动，
-# 若将来发现某个 .bat 在 LF 下解析异常，再单独给它加 eol=crlf。
+# 源码统一 LF。**批处理是例外**：cmd.exe 按当前代码页逐字节读 .bat，
+# LF 结尾时汉字的后两个字节会被当成一个全角字，把换行一起吃掉，
+# 整行拼错，双击报一串「不是内部或外部命令」。2026-10-23 实测踩到过，
+# 所以 .bat/.cmd 单独指定 CRLF（deploy.py 落盘时也会再转一次兜底）。
 * text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
 
 # 二进制文件不做行尾转换
 *.png binary
