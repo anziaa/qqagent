@@ -1,0 +1,11 @@
+name: astrbot_plugin_obsidian_memory
+display_name: Obsidian 记忆
+desc: 把长期记忆存成一个 Obsidian 库（纯 .md），你可以直接打开看、改、画关系图
+version: v0.1.0
+author: anzi
+repo: https://github.com/anziaa/qqagent
+astrbot_version: ">=4.17.0"
+help: >-
+  /记忆 <关键词> 翻记忆库；/记住 <内容> 手动记一笔（主人）；
+  /忘掉 <关键词> 删记忆（主人）；/记忆库 看概况（主人）。
+  记忆存在 vault 目录里，用 Obsidian 打开即可查看和编辑。

@@ -68,6 +68,7 @@ components/*/data/
 # scripts/tools 下某些脚本 import 插件模块时会连带初始化 AstrBot，
 # 它按「当前工作目录」建 data/。真的数据在 runtime/astrbot/data/。
 /data/
+/components/data/
 
 # ---------- 系统垃圾 ----------
 Thumbs.db
@@ -90,3 +91,8 @@ config/personas/*.md
 
 # ---------- 音色参考音频：属于个人生物特征 ----------
 config/ref/*.wav
+
+# ---------- 机器人记忆库（Obsidian 库）----------
+# 物理上放在仓库里方便一起备份，但内容含 QQ 号、私人对话、她记下的事，
+# 公开仓库绝不能收。要版本管理就单独建一个私有仓库指向这个目录。
+memory/

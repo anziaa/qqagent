@@ -58,6 +58,13 @@ SPEC = [
         ["*.py", "*.json", "*.yaml", "*.txt"],
         False,
     ),
+    (
+        "obsidian_memory",
+        "components/astrbot_plugin_obsidian_memory",
+        ASTRBOT_HOME / "data" / "plugins" / "astrbot_plugin_obsidian_memory",
+        ["*.py", "*.json", "*.yaml", "*.md", "*.txt"],
+        False,
+    ),
     # 下面三个是上游插件，本地魔改过，所以源码也入库
     (
         "music",
@@ -134,6 +141,7 @@ RESTART_HINT = {
     "plugin": "重启 AstrBot（插件热重载有时不干净）",
     "relation": "重启 AstrBot",
     "self_profile": "重启 AstrBot",
+    "obsidian_memory": "热重载插件；改了 vault.py / 配置结构就重启 AstrBot",
     "music": "重启 AstrBot",
     "qzone": "重启 AstrBot",
     "favourpro": "重启 AstrBot",

@@ -1,0 +1,80 @@
+{
+  "enable": {
+    "description": "启用 Obsidian 记忆",
+    "type": "bool",
+    "hint": "关掉后既不注入也不整理，但 vault 里的文件不动",
+    "default": true
+  },
+  "vault_path": {
+    "description": "记忆库目录（Obsidian 库根）",
+    "type": "string",
+    "hint": "留空则用环境变量 QQAGENT_MEMORY_VAULT，再没有就用插件数据目录下的 vault。填绝对路径，例如 D:/Code/qqagent/memory",
+    "default": ""
+  },
+  "owner_qqs": {
+    "description": "主人 QQ 号",
+    "type": "string",
+    "hint": "多个用逗号分隔。只有主人能手动记/删、能看全库检索，也才会注入 private/主人.md。AstrBot 管理员自动算主人",
+    "default": ""
+  },
+  "inject_enable": {
+    "description": "把记忆注入到对话",
+    "type": "bool",
+    "hint": "关掉后只写不读，记忆库照常积累",
+    "default": true
+  },
+  "person_facts": {
+    "description": "每轮注入当前人多少条事实",
+    "type": "int",
+    "hint": "最新的一批。8 条约 200 字，太多会挤占上下文",
+    "default": 8
+  },
+  "recall_enable": {
+    "description": "按本轮消息检索往事",
+    "type": "bool",
+    "hint": "关键词命中日记/主题/别人的档案时，把最相关的一两句一起注入",
+    "default": true
+  },
+  "recall_topk": {
+    "description": "最多注入几条往事",
+    "type": "int",
+    "hint": "建议 2~4，多了反而干扰",
+    "default": 3
+  },
+  "private_inject": {
+    "description": "对主人注入 private/主人.md",
+    "type": "bool",
+    "hint": "这个文件插件只读不写，内容你自己在 Obsidian 里维护",
+    "default": true
+  },
+  "self_inject": {
+    "description": "注入她自己最近的状态",
+    "type": "bool",
+    "hint": "取 self/我.md 最新的两条。关掉就只靠关键词检索命中",
+    "default": true
+  },
+  "auto_summary": {
+    "description": "自动整理记忆",
+    "type": "bool",
+    "hint": "攒够若干轮对话后，后台调一次模型提取事实、写日记。关掉就只靠主动记",
+    "default": true
+  },
+  "summary_every": {
+    "description": "攒多少轮整理一次",
+    "type": "int",
+    "hint": "按用户消息数算。12 轮一次大约每次几百 token，太小会把闲聊也记下来",
+    "default": 12
+  },
+  "summary_provider_id": {
+    "description": "整理用哪个模型",
+    "type": "string",
+    "hint": "填 provider id，例如 deepseek/deepseek-flash。留空用当前对话模型（贵一些）",
+    "default": ""
+  },
+  "fact_keep": {
+    "description": "每个人最多留多少条事实",
+    "type": "int",
+    "hint": "超出后丢最早的。60 条约 1.5 KB，提示词里只注入最新的一部分",
+    "default": 60
+  }
+}
