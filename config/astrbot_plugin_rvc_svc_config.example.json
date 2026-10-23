@@ -28,5 +28,5 @@
   "speak_key_shift": 0,
   "speak_cooldown": 8,
   "speak_max_chars": 90,
-  "rvc_index_dir": "D:/RVC/assets/indices"
+  "rvc_index_dir": "D:/path/to/rvc/assets/indices"
 }

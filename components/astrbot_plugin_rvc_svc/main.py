@@ -981,7 +981,7 @@ class MusicPlugin(Star):
                 # 模型看不懂就去现编理由（"那头又摔门了"），排查的人根本没线索。
                 logger.error(
                     f"[唱歌] 翻唱后端连不上：{self.rvc_base_url}"
-                    "（检查 D:\\RVCSVC-API 的 app_rvc.py 是否在跑，端口 7860）"
+                    "（检查 RVCSVC_HOME 下的 app_rvc.py 是否在跑，端口 7860）"
                 )
                 return (
                     f"【后端未启动】翻唱服务 {self.rvc_base_url} 连不上，这次没唱成。"

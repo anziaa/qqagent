@@ -64,9 +64,10 @@ REPO_ROOT = os.path.dirname(RUNTIME) if os.path.basename(RUNTIME) == "runtime" e
 NAPCAT_DIR = os.environ.get("NAPCAT_HOME") or os.path.join(RUNTIME, "napcat")
 ASTRBOT_DIR = os.environ.get("ASTRBOT_HOME") or os.path.join(RUNTIME, "astrbot")
 
-# 仓库外的两个重家伙（RVC 模型体积太大，单独放）
-RVC_DIR = os.environ.get("RVC_HOME") or r"D:\RVC20240604Nvidia"
-API_DIR = os.environ.get("RVCSVC_HOME") or r"D:\RVCSVC-API\RVCSVC-API"
+# 仓库外的两个重家伙（RVC 模型体积太大，单独放），默认和仓库同盘
+_DRIVE = os.path.splitdrive(REPO_ROOT)[0] + os.sep
+RVC_DIR = os.environ.get("RVC_HOME") or os.path.join(_DRIVE, "RVC20240604Nvidia")
+API_DIR = os.environ.get("RVCSVC_HOME") or os.path.join(_DRIVE, "RVCSVC-API", "RVCSVC-API")
 
 
 def _astrbot_exe() -> str:

@@ -33,7 +33,7 @@ def _ffmpeg() -> str:
 
 FFMPEG = _ffmpeg()
 BASE = "http://127.0.0.1:7897"
-RVC_ROOT = Path(os.environ.get("RVC_HOME") or r"D:/RVC20240604Nvidia")
+RVC_ROOT = Path(os.environ.get("RVC_HOME") or (Path(__file__).resolve().parents[2].drive + "/RVC20240604Nvidia"))
 
 
 def post(path, payload, timeout=300):

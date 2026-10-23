@@ -1,7 +1,7 @@
 #!/bin/bash
 # 从 ModelScope 直链下载 CosyVoice2-0.5B 权重，支持续传。
 set -u
-cd "D:/WorkBuddy/QQAgent/cosyvoice2/CosyVoice2-0.5B" || exit 1
+cd "$(dirname "$0")/../../cosyvoice2/CosyVoice2-0.5B" || exit 1
 BASE="https://www.modelscope.cn/api/v1/models/iic/CosyVoice2-0.5B/repo?Revision=master&FilePath="
 
 FILES="llm.pt flow.pt hift.pt campplus.onnx speech_tokenizer_v2.onnx cosyvoice2.yaml configuration.json CosyVoice-BlankEN/config.json CosyVoice-BlankEN/generation_config.json CosyVoice-BlankEN/merges.txt CosyVoice-BlankEN/tokenizer_config.json CosyVoice-BlankEN/vocab.json CosyVoice-BlankEN/model.safetensors"

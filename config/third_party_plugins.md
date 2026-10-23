@@ -17,7 +17,7 @@ git clone --depth 1 <仓库地址> <插件目录名>
 ```
 
 - `meme_manager` 额外依赖 `boto3`（R2 图床模块顶层 import，缺了插件加载即失败）。
-  装进 AstrBot 自己的环境：`D:/Anaconda_envs/envs/astrbot/python.exe -m pip install boto3`
+  装进 AstrBot 自己的环境：`<AstrBot 用的 python> -m pip install boto3`
 - `meme_manager` 要求 AstrBot **>= 4.17.0**；`omnidraw` 要求 **>= 4.16, < 5**。
 
 ## 已入库（改过源码，见 components/）

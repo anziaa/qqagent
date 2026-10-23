@@ -15,7 +15,7 @@
 
 三个运行位置默认按下面 DEPLOY_DEFAULTS 走，也可以用环境变量覆盖：
     ASTRBOT_HOME     AstrBot 根目录（默认 runtime/astrbot）
-    RVCSVC_HOME      翻唱后端目录（默认 D:\\RVCSVC-API\\RVCSVC-API）
+    RVCSVC_HOME      翻唱后端目录（默认 <仓库所在盘>/RVCSVC-API/RVCSVC-API）
     COSYVOICE_HOME   CosyVoice2 目录（默认 cosyvoice2）
 """
 
@@ -30,9 +30,11 @@ for _s in (sys.stdout, sys.stderr):
         pass
 
 ROOT = Path(__file__).resolve().parents[1]
+# 仓库外的重家伙（RVC / 翻唱后端）默认和仓库放在同一个盘
+DRIVE = Path(ROOT.drive + os.sep)
 
 ASTRBOT_HOME = Path(os.environ.get("ASTRBOT_HOME") or ROOT / "runtime" / "astrbot")
-RVCSVC_HOME = Path(os.environ.get("RVCSVC_HOME") or r"D:\RVCSVC-API\RVCSVC-API")
+RVCSVC_HOME = Path(os.environ.get("RVCSVC_HOME") or DRIVE / "RVCSVC-API" / "RVCSVC-API")
 COSYVOICE_HOME = Path(os.environ.get("COSYVOICE_HOME") or ROOT / "cosyvoice2")
 
 # (短名, 仓库内目录, 运行目录, 要同步的文件模式, 是否递归子目录)
