@@ -3,7 +3,7 @@
 一个跑在 QQ 上的语音机器人：会聊天，会唱歌，能用自己的声音发语音条。
 
 语音不是预设的 TTS 音色——说话走 CosyVoice2 做情感合成，唱歌走 RVC 把整首歌换成自己的音色，
-最后都以 QQ 语音条的形式发出来。
+最后都以 QQ 语音条的形式发出来。文字聊天之外还会按情绪挑表情包、按需画图。
 
 > 项目处于自用阶段：能跑、能改，但安装步骤还不算省心，需要自备 GPU 环境和模型权重。
 
@@ -18,6 +18,8 @@
 | **点歌 / 点播** | 通过 `astrbot_plugin_music` 搜歌、卡片展示、语音或文件发送 |
 | **QQ 空间** | 通过 `astrbot_plugin_qzone` 发说说、看/赞/评好友动态 |
 | **好感度** | 通过 `astrbot_plugin_favourpro` 维护多维度关系状态，影响回复语气 |
+| **表情包** | 通过 `astrbot_plugin_meme_manager` 按情绪和场景挑表情包发送，支持多包与自动收集 |
+| **画图** | 通过 `astrbot_plugin_omnidraw` 文生图 / 图生图，直接发图 |
 | **主动搭话** | 通过 `astrbot_plugin_proactive_chat` 在合适时机主动发消息 |
 
 ## 架构
@@ -57,6 +59,7 @@ components/
   astrbot_plugin_music/         点歌插件                                             ★改过
   astrbot_plugin_qzone/         QQ 空间插件                                          ★改过
   astrbot_plugin_favourpro/     好感度插件                                            ★改过
+  astrbot_plugin_meme_manager/  表情包插件（多包、语义检索、自动收集）                 ★改过
   astrbot_plugin_relation/      关系记忆插件（自研）
   astrbot_plugin_self_profile/  账号资料插件（自研）
   rvc_api/                      7860 翻唱后端（Gradio 接口）
@@ -68,8 +71,11 @@ scripts/
 config/
   *.example.json                插件配置模板（复制成 *.json 再改）
   personas/example.md           人格示例
+  meme_packs.md                 表情包资源包与分类设计（换机器时按它重建骨架）
+  third_party_plugins.md        第三方插件清单：哪些入库、哪些按上游重装
 runtime/                        NapCat / AstrBot 本体（随仓库摆放，不入库，见下）
 cosyvoice2/                     7870 的运行目录（4.8G 权重 + venv，不入库）
+data/                           脚本误在仓库根初始化 AstrBot 时生成的目录，不入库
 ```
 
 `config/` 里真正生效的配置、实际使用的人格、音色参考音频都不入库——它们含 QQ 号、
@@ -87,7 +93,8 @@ cosyvoice2/                     7870 的运行目录（4.8G 权重 + venv，不�
 `<仓库>/runtime/`，不需要改任何路径。要放别处就设 `QQAGENT_RUNTIME`。
 
 标 ★ 的是**在上游基础上改过源码**的插件，所以源码直接放在本仓库里。没改动过的插件
-（`proactive_chat`）不在这里，按下面的安装说明从 AstrBot 插件市场装原版即可。
+（`proactive_chat`、`omnidraw`）不在这里，按下面的安装说明从 AstrBot 插件市场装原版即可。
+逐个插件的入库判据、上游版本和改动清单见 [`config/third_party_plugins.md`](config/third_party_plugins.md)。
 
 ## 对上游插件的修改
 
@@ -134,9 +141,38 @@ cosyvoice2/                     7870 的运行目录（4.8G 权重 + venv，不�
 上游是「RVC 翻唱」插件，本地改得几乎只剩骨架：
 
 - **说话链路整体替换**：不再用 RVC 做 TTS，改调 CosyVoice2（7870），支持情绪与语气参数。
-- **唱歌链路重写**：接入自己的搜歌源，整首成品缓存 + 按歌词选段截取，只发十几秒。
+- **唱歌链路重写**：接入自己的搜歌源，整首成品缓存 + 按歌词选段截取，只发十几秒；
+  说「唱整首」时按 55 秒切成多条依次发。
+- **选段策略**（`segment.py`，改得最细的一处）：
+  - **长度不写死**：`sing_clip` 只是目标值，终点会吸附到最近的**句末**，
+    允许 ±45% 浮动——宁可 14 秒或 24 秒，也不切在半句腰上。
+  - **段落靠歌词结构猜**：按「连续几句整块重唱」判副歌，剩下的不重复块判主歌；
+    桥段取「前后都有副歌、自己不重复、位置在 28%~88%」的那一段。
+    猜不出就**明确返回失败**，而不是悄悄随机到开头（以前说 bridge 会唱成开头）。
+  - **分工**：规则优先（零 token、快），
+    规则认不出来时才让模型挑起点，且给 20 秒超时——推理型模型会在「哪段算 bridge」
+    上纠结上万个 token。模型挑出的句子若与意图矛盾（要 bridge 却挑了重唱句）直接判无效。
+  - **点名句数也认**：「唱两句 / 来四句」按句数收尾，可以超过常规上限。
+  - **同段复用**：同一首歌同一个 `part` 再问一次，直接读上次的结果，不用再等一次模型；
+    但刚唱过的段不复用，「换个副歌」会真的换。
 - **补 ffmpeg PATH**：AstrBot 自带 ffmpeg 在子进程里找不到，显式注入路径。
 - **合并转发节点不再硬编码机器人 QQ**，改为从事件取 `self_id`。
+
+### `astrbot_plugin_meme_manager`（上游 MIT，anka）
+
+基线 v5.2.4。改的是「发得出、存得下、写对包」这三件事：
+
+| 文件 | 改动 |
+|---|---|
+| `mixins/event_handlers.py`、`mixins/commands.py` | `/表情管理 添加表情` 遇到本地图片会失败：入参 `img.url` 是 AstrBot 落盘的 Windows 路径，上游不判断直接 `aiohttp.get()`，框架抛 `NonHttpUrlClientError`。现在只有 `http(s)://` 走 HTTP，其余交给 `Image.convert_to_file_path()`（本地路径 / `file://` / base64 都支持） |
+| 同上 | 全部保存失败时上游仍回「✅ 已经成功收录了 0 张新表情」，改成明确报失败，部分失败附「另有 N 张保存失败」 |
+| `mixins/commands.py` | 多包绑定时 `/添加表情` 只认主包分类：读取会合并所有绑定包，写入却只认主包，于是非主包分类被判「无效类别」。现在校验用合并映射，并按「哪个包声明了这个分类」写回那个包 |
+| `backend/auto_collect.py`、`backend/packs/resolver.py` | 自动收集只要填了 `target_pack_id` 就只加载那一个包的分类，模型看不到其它包（如人设包）的分类，图全落同一个包。现在留空时用合并映射识别、按分类归属落盘；`target_pack_id` 退化为「分类无法确定时的兜底包」 |
+| `main.py` | 注入提示词后打一行自检日志（长度、分类数、是否含标记与频率引导），排查「配了没生效」不用再翻代码 |
+| `_conf_schema.json` | 对应配置项说明同步更新 |
+
+另外还是**空分类不进提示词**的老规矩：分类目录里没有图片，模型就不知道它存在。
+包的分类怎么设计、换机器怎么重建，见 [`config/meme_packs.md`](config/meme_packs.md)。
 
 ## 环境要求
 
@@ -188,20 +224,36 @@ cp config/astrbot_plugin_relation_config.example.json config/astrbot_plugin_rela
 
 **5. 装插件**
 
-本仓库里的四个插件（`rvc_svc` / `music` / `qzone` / `favourpro`）和两个自研插件
-（`relation` / `self_profile`）用部署脚本同步：
+本仓库里的五个插件（`rvc_svc` / `music` / `qzone` / `favourpro` / `meme_manager`）
+和两个自研插件（`relation` / `self_profile`）用部署脚本同步：
 
 ```bash
 # 默认同步到 <仓库>/runtime/astrbot，不用传参
 python scripts/deploy.py --check   # 只看差异，不写文件
 python scripts/deploy.py           # 实际同步
 
+# 只同步某一个组件
+python scripts/deploy.py plugin
+# 可用目标：plugin / relation / self_profile / music / qzone / favourpro /
+#          meme_manager / rvc_api / cosyvoice / scripts / tools
+
 # AstrBot 装在别处时再显式指定
 set ASTRBOT_HOME=D:\somewhere\astrbot
 ```
 
-没改动过的 `proactive_chat` 不用从本仓库拿，直接在 AstrBot 插件管理里按名字安装原版
-（[上游地址](https://github.com/Pancakes-Labs/astrbot_plugin_proactive_chat)）。
+改动过的插件从本仓库拿，没改动过的直接在 AstrBot 插件管理里按名字安装原版：
+
+| 插件 | 要求 | 说明 |
+|---|---|---|
+| `astrbot_plugin_proactive_chat` | — | [上游](https://github.com/Pancakes-Labs/astrbot_plugin_proactive_chat) |
+| `astrbot_plugin_omnidraw` | AstrBot `>=4.16, <5` | [上游](https://github.com/diaomin66/astrbot_plugin_omnidraw)，画图用 |
+
+`meme_manager` 有两个额外前提：AstrBot **>= 4.17.0**，且装 `boto3`
+（R2 图床模块是顶层 import，缺了插件直接加载失败）：
+
+```bash
+python -m pip install boto3    # 装进 AstrBot 自己的环境
+```
 
 两个需要手动补的资源（版权原因不入库）：
 
@@ -231,6 +283,10 @@ scripts/一键启动服务.bat
 
 - **首次唱歌慢**：第一次要加载 hubert、rmvpe、音色模型和索引，冷启动 1 分钟以上；
   而且当前实现是把整首歌处理完才截取片段，一首 3 分钟的歌要做完 3 分钟的活。
+- **片段长度会浮动**：`sing_clip` 是目标值不是固定值，为了对齐句末允许 ±45%
+  （设 18 秒，实际 14~24 秒都正常）。要卡死长度就没法保证不切在半句上。
+- **段落识别靠歌词结构猜**：副歌靠「整块重唱」判，遇到全程不重复或重复不规整的歌会认不出，
+  此时退到随机/模型兜底，可能不是你要的那一段。
 - **后端单队列**：GPU 一次只处理一个任务，多人同时点歌要排队。
 - **必须联网**：搜歌依赖在线音源，公共源失效后需要自备音乐 API。
 - **Windows only**：启动脚本是 .bat，Linux 下要自己写 systemd 或 shell 脚本。
@@ -258,7 +314,9 @@ scripts/一键启动服务.bat
 | `astrbot_plugin_music` | Zhalslar | 点歌、卡片、语音发送 | **改** | [仓库](https://github.com/Zhalslar/astrbot_plugin_music) |
 | `astrbot_plugin_qzone` | Zhalslar | QQ 空间互动 | **改** | [仓库](https://github.com/Zhalslar/astrbot_plugin_qzone) |
 | `astrbot_plugin_favourpro` | 天各一方 | 好感度与关系状态 | **改** | [仓库](https://github.com/Catfish872/astrbot_plugin_favourpro) |
+| `astrbot_plugin_meme_manager` | anka | 表情包管理与智能发送 | **改** | [仓库](https://github.com/anka-afk/astrbot_plugin_meme_manager) |
 | `astrbot_plugin_proactive_chat` | DBJD-CR | 主动消息 | 未改 | [仓库](https://github.com/Pancakes-Labs/astrbot_plugin_proactive_chat) |
+| `astrbot_plugin_omnidraw` | 雪碧bir | 文生图 / 图生图 | 未改 | [仓库](https://github.com/diaomin66/astrbot_plugin_omnidraw) |
 
 `relation`（关系记忆）与 `self_profile`（账号资料）是本项目自研，没有上游。
 
@@ -275,6 +333,7 @@ AGPL 代码，按同协议分发。
 | `astrbot_plugin_favourpro/` | AGPL-3.0 |
 | `astrbot_plugin_qzone/` | GPL-3.0 |
 | `astrbot_plugin_music/` | MIT |
+| `astrbot_plugin_meme_manager/` | MIT |
 | `astrbot_plugin_relation/`、`astrbot_plugin_self_profile/` | 随本仓库 AGPL-3.0 |
 
 转发或二次分发时请一并保留这些许可证文件与上游署名。
