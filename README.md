@@ -60,7 +60,7 @@ components/
   astrbot_plugin_music/         点歌插件                                             ★改过
   astrbot_plugin_qzone/         QQ 空间插件                                          ★改过
   astrbot_plugin_favourpro/     好感度插件                                            ★改过
-  astrbot_plugin_meme_manager/  表情包插件（多包、语义检索、自动收集）                 ★改过
+  astrbot_plugin_meme_manager/  表情包插件（多包、两层选图、语义检索、自动收集）  ★改过
   astrbot_plugin_relation/      关系记忆插件（自研）
   astrbot_plugin_self_profile/  账号资料插件（自研）
   astrbot_plugin_obsidian_memory/ 长期记忆插件，写一个 Obsidian 库（自研）
@@ -177,11 +177,21 @@ data/                           脚本误在仓库根初始化 AstrBot 时生成
 | `mixins/event_handlers.py`、`mixins/commands.py` | `/表情管理 添加表情` 遇到本地图片会失败：入参 `img.url` 是 AstrBot 落盘的 Windows 路径，上游不判断直接 `aiohttp.get()`，框架抛 `NonHttpUrlClientError`。现在只有 `http(s)://` 走 HTTP，其余交给 `Image.convert_to_file_path()`（本地路径 / `file://` / base64 都支持） |
 | 同上 | 全部保存失败时上游仍回「✅ 已经成功收录了 0 张新表情」，改成明确报失败，部分失败附「另有 N 张保存失败」 |
 | `mixins/commands.py` | 多包绑定时 `/添加表情` 只认主包分类：读取会合并所有绑定包，写入却只认主包，于是非主包分类被判「无效类别」。现在校验用合并映射，并按「哪个包声明了这个分类」写回那个包 |
+| `mixins/event_handlers.py` | **选图多了一层**：分类选完后，如果该分类里不止一张图，把候选的图片描述（语义索引里已有的 caption + 图上文字）交给情感模型挑一张更贴合当前对话的；10 秒超时，失败、未命中、候选不足两张一律退回随机。它只提升贴合度，不会让本该发出的回复卡住 |
 | `backend/auto_collect.py`、`backend/packs/resolver.py` | 自动收集只要填了 `target_pack_id` 就只加载那一个包的分类，模型看不到其它包（如人设包）的分类，图全落同一个包。现在留空时用合并映射识别、按分类归属落盘；`target_pack_id` 退化为「分类无法确定时的兜底包」 |
 | `main.py` | 注入提示词后打一行自检日志（长度、分类数、是否含标记与频率引导），排查「配了没生效」不用再翻代码 |
 | `_conf_schema.json` | 对应配置项说明同步更新 |
 
 另外还是**空分类不进提示词**的老规矩：分类目录里没有图片，模型就不知道它存在。
+
+**选图是两层**：第一层按情绪定分类（回复模型输出 `&&分类名&&`，或辅助模型替你选分类），
+第二层在该分类的候选图里按描述再挑一张。第二层只对**做过图片描述**的图生效——
+描述来自语义索引，已有就顺手用，不用额外建；没描述的图直接落到随机那一档。
+任何一步失败都退回随机，所以最坏情况就是上游的原有行为。
+
+一个已知缺口：第二层的开关在代码里读 `meme_exact_pick`，但 `_conf_schema.json`
+里没有对应配置项，所以现在常开、关不掉。要能关，得先补一个配置项。
+
 包的分类怎么设计、换机器怎么重建，见 [`config/meme_packs.md`](config/meme_packs.md)。
 
 ## 记忆：一个 Obsidian 库
