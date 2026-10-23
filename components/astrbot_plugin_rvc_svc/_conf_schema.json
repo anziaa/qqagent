@@ -54,9 +54,9 @@
     "default": "frieren1.1.pth"
   },
   "sing_clip_seconds": {
-    "description": "自主翻唱发送的片段长度（秒）",
+    "description": "翻唱片段的目标时长（秒）",
     "type": "int",
-    "hint": "QQ 单条语音上限 60 秒，建议 12~25",
+    "hint": "这是目标值而非固定值：终点会吸附到最近的歌词句末（约 ±45% 浮动），保证不切在半句上。QQ 单条语音上限 60 秒，建议 14~22",
     "default": 18
   },
   "sing_cooldown": {

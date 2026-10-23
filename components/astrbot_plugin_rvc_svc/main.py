@@ -766,6 +766,7 @@ class MusicPlugin(Star):
         key_shift: int = 0,
         part: str = "",
         full: bool = False,
+        line_count: int = 0,
     ):
         """用你自己的声音翻唱一首歌，可以只唱一小段，也可以整首唱完。
 
@@ -775,8 +776,11 @@ class MusicPlugin(Star):
         Args:
             song_name (string): 想唱的歌名，可以带歌手，例如"晴天 周杰伦"
             key_shift (int): 升降调，单位是半音，正常填 0；女声唱男歌可填 4~6，男声唱女歌填 -4~-6
-            part (string): 想唱哪一段，平时留空。对方明确说了才填，例如"副歌""开头""结尾""第二段""再来一段""1:20""想把你抱紧"（直接写歌词也行）
+            part (string): 想唱哪一段，平时留空。对方明确说了才填，例如"副歌""开头""结尾"
+                "bridge"（=桥段/过渡段，副歌之间那段；说"桥段"也认）"主歌""第二段"
+                "再来一段""1:20"，或者直接写一句歌词（如"想把你抱紧"）
             full (bool): 是否唱整首。对方说"唱整首""从头唱到尾""整首"时填 true，会切成多条语音依次发出；只想听一小段时保持 false
+            line_count (int): 对方明确说了唱几句时填句数（"唱两句"填 2、"来四句"填 4），平时填 0
         """
         sender = event.get_sender_id()
         now = time.time()
@@ -928,7 +932,11 @@ class MusicPlugin(Star):
                 )
 
             clip_paths = [await self._make_clip(
-                result_path, song, lyrics_text=lyrics_text, part=part
+                result_path,
+                song,
+                lyrics_text=lyrics_text,
+                part=part,
+                line_count=line_count,
             )]
             out = clip_paths[0] or Path(result_path)
             await event.send(event.chain_result([Record(file=str(out))]))
@@ -1137,12 +1145,16 @@ class MusicPlugin(Star):
         song: dict,
         lyrics_text: str | None = None,
         part: str = "",
+        line_count: int = 0,
     ):
         """把整首翻唱裁成一小段，方便用一条 QQ 语音发完。
 
+        长度不写死：`sing_clip` 只是目标值，终点会吸附到最近的歌词句末；
+        对方点名「唱两句 / 四句」时按句数收尾。
         同一首歌连续要片段时，会避开刚唱过的位置，保证每次不是同一段。
         返回剪好的 mp3 路径；不需要或失败返回 None（此时按整首发）。
         """
+        t0 = time.monotonic()
         ffmpeg = segment.find_ffmpeg()
         if not ffmpeg:
             logger.warning("未找到 ffmpeg，跳过片段截取")
@@ -1153,7 +1165,7 @@ class MusicPlugin(Star):
         if duration <= segment.MAX_CLIP:
             return None
 
-        clip = min(max(self.sing_clip, segment.MIN_CLIP), segment.MAX_CLIP)
+        target = min(max(self.sing_clip, segment.MIN_CLIP), segment.MAX_CLIP)
         lyrics_text = await self._resolve_lyrics(song, lyrics_text)
         try:
             lines = segment.parse_lrc(lyrics_text)
@@ -1165,32 +1177,127 @@ class MusicPlugin(Star):
         history = self._clip_history.setdefault(key, [])
         exclude = tuple(history[-4:])
 
-        start = None
-        # 明确指定了某一段（副歌/开头/歌词/时间点）时，直接用规则定位，不劳模型
-        if part and part.strip():
-            start = segment.pick_start(lines, duration, clip, part=part, exclude=exclude)
-            logger.info(f"按指定段落取段: part={part!r} -> {start:.1f}s")
-        else:
+        if line_count:
+            part = f"{part} {int(line_count)}句".strip()
+
+        # 分工：起点交给模型（它懂"bridge/高潮/第二段"这些意思），
+        # 时长交给规则（模型不碰时间）。时间点和句数是算术题，不劳模型。
+        want_lines = segment.requested_lines(part)
+        pos = segment.parse_position(part) if part else None
+        exact_time = bool(pos and pos[0] == "time")
+
+        start, length = None, None
+
+        # 同一首歌、同一个「part」再问一次时，直接复用上次模型给的答案：
+        # 点名要副歌/bridge，位置本来就该是那一段，没必要每次都等一次模型。
+        # 只对「指定了段落」生效——「再来一段」这种随机要求不能被缓存钉死。
+        plan_path: Path | None = None
+        if part.strip() and not want_lines and not exact_time:
+            safe_key = re.sub(r"[^\w.-]", "_", key)[:60]
+            safe_part = re.sub(r"[^\w\u4e00-\u9fff]+", "_", part.strip().lower())[:40]
+            plan_path = self._cache_dir("plan") / f"{safe_key}__{safe_part}.json"
+            try:
+                cached = json.loads(plan_path.read_text(encoding="utf-8"))
+                c_start = float(cached.get("start", -1))
+                c_len = float(cached.get("length", 0))
+                c_dur = float(cached.get("duration", duration))
+                if (
+                    0 <= c_start
+                    and 3.0 <= c_len <= segment.EXPLICIT_MAX + 1
+                    and c_start + c_len <= duration + 0.5
+                    and abs(c_dur - duration) <= 5.0
+                    # 刚唱过这一段就别复用：对方说「换个副歌」时要真的换，
+                    # 不能因为上次缓存的是这一段就一直给同一段
+                    and not any(
+                        segment.overlaps(c_start, e, c_len) for e in exclude
+                    )
+                ):
+                    start, length = c_start, c_len
+                    logger.info(
+                        f"挑段缓存命中: part={part!r} -> {start:.1f}s 起，长 {length:.1f}s"
+                    )
+            except (OSError, ValueError, TypeError):
+                pass
+
+        # 分工：规则优先（快、稳、不花 token），模型只在规则认不出来时兜底。
+        # 规则先算一遍，命中就直接用——指定了段落的情况下一次模型都不调。
+        rule_loc = None
+        if part.strip() and not want_lines:
+            rule_loc = segment.locate_part(
+                lines, duration, part, target, exclude=exclude
+            )
+
+        # 1) 规则优先
+        if start is None and rule_loc:
+            start, length = rule_loc
+            logger.info(
+                f"规则定位: part={part!r} -> {start:.1f}s 起，长 {length:.1f}s"
+            )
+
+        # 2) 规则认不出来 → 模型兜底。
+        #    只在「点名了段落」时调；「随便来一段」走规则随机，不花这一次往返。
+        if start is None and lines and part.strip() and not want_lines and not exact_time:
             try:
                 provider = self.context.get_using_provider()
             except Exception:
                 provider = None
-            if provider is not None and lines:
-                start = await segment.choose_start_by_llm(
-                    lines, duration, clip, provider, exclude=exclude
+            if provider is not None:
+                hint = await segment.choose_start_by_llm(
+                    lines, duration, target, provider,
+                    exclude=exclude, part=part, timeout=segment.PICK_TIMEOUT,
                 )
-            if start is None:
-                start = segment.fallback_start(
-                    lines, duration, clip, exclude=exclude
-                )
+                if hint is not None:
+                    start, length = segment.plan_clip(
+                        lines, duration, target, part=part, exclude=exclude,
+                        start_hint=hint,
+                    )
+                    logger.info(
+                        f"模型兜底挑段: part={part!r} -> {start:.1f}s 起，长 {length:.1f}s"
+                    )
 
-        start = max(0.0, min(start, max(0.0, duration - clip - 0.5)))
+        # 3) 还没有（没指定段落，或规则也认不出来）→ 兜底
+        if start is None:
+            hint3 = None
+            if part.strip() and not want_lines and not exact_time:
+                # 点名了某段却认不出来：至少别从开头唱
+                hint3 = segment.late_fallback_start(
+                    lines, duration, target, exclude=exclude
+                )
+            start, length = segment.plan_clip(
+                lines,
+                duration,
+                target,
+                part=part if want_lines else "",
+                exclude=exclude,
+                start_hint=hint3,
+            )
+
+        start = max(0.0, min(start, max(0.0, duration - length - 0.3)))
+        if plan_path is not None:
+            try:
+                plan_path.write_text(
+                    json.dumps(
+                        {
+                            "part": part,
+                            "song": song.get("name", ""),
+                            "start": round(start, 1),
+                            "length": round(length, 1),
+                            "duration": round(duration, 1),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    encoding="utf-8",
+                )
+            except OSError:
+                pass
         history.append(start)
         del history[:-6]  # 只留最近 6 次，避免无限涨
         logger.info(
-            f"截取片段: {start:.1f}s 起，长 {clip:.0f}s（总长 {duration:.1f}s，已唱过 {len(history)} 次）"
+            f"截取片段: {start:.1f}s 起，长 {length:.1f}s（目标 {target:.0f}s，"
+            f"part={part or '-'}，总长 {duration:.1f}s，已唱过 {len(history)} 次，"
+            f"选段耗时 {time.monotonic() - t0:.1f}s）"
         )
-        return segment.cut_clip(ffmpeg, src, start, clip, src.parent / "clips")
+        return segment.cut_clip(ffmpeg, src, start, length, src.parent / "clips")
 
     async def _resolve_lyrics(self, song: dict, lyrics_text: str | None) -> str:
         """拿歌词：优先用传进来的，否则去 QQ 音乐取"""
